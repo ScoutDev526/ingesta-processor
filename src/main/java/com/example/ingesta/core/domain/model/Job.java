@@ -1,0 +1,65 @@
+package com.example.ingesta.core.domain.model;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public class Job {
+
+    private final UUID id;
+    private final String name;
+    private final String filePath;
+    private final FileType fileType;
+    private final List<Task> tasks;
+    private final Metrics metrics;
+    private final List<LogEntry> logs;
+    private Status status;
+
+    public Job(String name, String filePath, FileType fileType) {
+        this.id = UUID.randomUUID();
+        this.name = name;
+        this.filePath = filePath;
+        this.fileType = fileType;
+        this.tasks = new ArrayList<>();
+        this.metrics = new Metrics();
+        this.logs = new ArrayList<>();
+        this.status = Status.PENDING;
+    }
+
+    public void addTask(Task task) {
+        this.tasks.add(task);
+    }
+
+    public void start() {
+        this.status = Status.RUNNING;
+        this.metrics.start();
+        addLog(LogEntry.info(name, "Job started"));
+    }
+
+    public void complete(Status status) {
+        this.status = status;
+        this.metrics.finish(status);
+        addLog(LogEntry.info(name, "Job completed with status: " + status));
+    }
+
+    public void skip(String reason) {
+        this.status = Status.SKIPPED;
+        this.metrics.finish(Status.SKIPPED);
+        addLog(LogEntry.warn(name, "Job skipped: " + reason));
+    }
+
+    public void addLog(LogEntry entry) {
+        this.logs.add(entry);
+        if (entry.getLevel() == LogLevel.ERROR) metrics.incrementErrors();
+        if (entry.getLevel() == LogLevel.WARN) metrics.incrementWarnings();
+    }
+
+    public UUID getId() { return id; }
+    public String getName() { return name; }
+    public String getFilePath() { return filePath; }
+    public FileType getFileType() { return fileType; }
+    public List<Task> getTasks() { return List.copyOf(tasks); }
+    public Metrics getMetrics() { return metrics; }
+    public List<LogEntry> getLogs() { return List.copyOf(logs); }
+    public Status getStatus() { return status; }
+}

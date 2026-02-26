@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: ingesta-processor
+  datasource:
+    url: jdbc:h2:mem:ingestadb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  mail:
+    host: localhost
+    port: 1025
+
+ingesta:
+  jobs:
+    path: classpath:jobs
+  working-directory: /tmp/ingesta
+  scheduler:
+    enabled: false
+    cron: "0 0 2 * * ?"
+  notification:
+    enabled: false
+    email:
+      to: admin@example.com
+      from: ingesta@example.com
+
+logging:
+  level:
+    com.example.ingesta: INFO

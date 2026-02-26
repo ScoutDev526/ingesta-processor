@@ -1,0 +1,43 @@
+name: employee-import
+description: Import employee data from Excel file
+enabled: true
+fileType: EXCEL
+batchSize: 500
+source:
+  type: RESOURCES
+  location:
+    path: /data/employees.xlsx
+  locationAfterProcessing: /data/processed/
+parameters:
+  tableName: employees
+
+tasks:
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+      - name: uppercase-names
+        order: 2
+        type: UPPERCASE
+        parameters:
+          columns: "first_name,last_name"
+
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      - name: truncate-table
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: employees
+      - name: insert-records
+        order: 2
+        type: INSERT
+        parameters:
+          tableName: employees
