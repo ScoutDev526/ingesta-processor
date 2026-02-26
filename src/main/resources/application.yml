@@ -26,4 +26,4 @@ ingesta:
 
 logging:
   level:
-    com.example.ingesta: INFO
+    es.ing.icenterprise.arthur: INFO

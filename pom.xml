@@ -11,8 +11,8 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.example</groupId>
-    <artifactId>ingesta-processor</artifactId>
+    <groupId>es.ing.icenterprise</groupId>
+    <artifactId>arthur</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <name>Ingesta Processor</name>
     <description>Hexagonal architecture ETL processor for Excel/XML data ingestion</description>

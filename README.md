@@ -147,7 +147,7 @@ Key properties in `application.yml`:
 ## Project Structure
 
 ```
-src/main/java/com/example/ingesta/
+src/main/java/es/ing/icenterprise/arthur/
 ├── core/
 │   ├── domain/
 │   │   ├── model/          # Job, Task, Step, Metrics, ProcessReport, enums
