@@ -178,7 +178,7 @@ class IngestaServiceTest {
         when(jobDefinitionLoader.load(any())).thenReturn(createSampleDefinition());
         when(fileDownloader.download(any())).thenReturn(tempData);
         when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(createSuccessReport());
-        doThrow(new RuntimeException("Email server down")).when(notificationPort).notify(any(), any());
+        doThrow(new RuntimeException("Notification failed")).when(notificationPort).notify(any(), any());
 
         // Should not throw
         ProcessReport result = service.execute(ExecuteCommand.fromManual());

@@ -45,7 +45,7 @@ A Spring Boot ETL processor built with **Hexagonal Architecture** (Ports & Adapt
 4. **Create** Job domain objects via `JobFactory`
 5. **Process** each job: read file → transform data → persist to DB
 6. **Collect** metrics and build `ProcessReport`
-7. **Notify** via email (optional)
+7. **Notify** via log (extensible to other channels)
 8. **Cleanup** working directory
 
 ## Tech Stack
@@ -142,7 +142,7 @@ Key properties in `application.yml`:
 | `ingesta.working-directory` | `/tmp/ingesta` | Temp directory for file processing |
 | `ingesta.scheduler.enabled` | `false` | Enable cron-based execution |
 | `ingesta.scheduler.cron` | `0 0 2 * * ?` | Cron expression (daily at 2am) |
-| `ingesta.notification.enabled` | `false` | Enable email notifications |
+| `ingesta.notification.enabled` | `true` | Enable log notifications |
 
 ## Project Structure
 
@@ -166,7 +166,7 @@ src/main/java/com/example/ingesta/
 │       ├── download/       # Local, SharePoint downloaders
 │       ├── reader/         # Excel, XML readers
 │       ├── persistence/    # JDBC adapter
-│       ├── notification/   # Email adapter
+│       ├── notification/   # Log notification adapter
 │       ├── report/         # CSV export adapter
 │       └── cleanup/        # Working directory cleanup
 └── config/                 # Spring configuration

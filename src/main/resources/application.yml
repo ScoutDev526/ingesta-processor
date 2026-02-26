@@ -14,10 +14,6 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
-  mail:
-    host: localhost
-    port: 1025
-
 ingesta:
   jobs:
     path: classpath:jobs
@@ -26,10 +22,7 @@ ingesta:
     enabled: false
     cron: "0 0 2 * * ?"
   notification:
-    enabled: false
-    email:
-      to: admin@example.com
-      from: ingesta@example.com
+    enabled: true
 
 logging:
   level:
