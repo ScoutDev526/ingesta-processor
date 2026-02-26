@@ -9,9 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Stream;
 
 @Component
@@ -21,10 +19,14 @@ public class DefaultJobProcessor implements JobProcessor {
 
     private final List<FileReaderPort> fileReaders;
     private final PersistencePort persistencePort;
+    private final ColumnAutoMapper columnAutoMapper;
 
-    public DefaultJobProcessor(List<FileReaderPort> fileReaders, PersistencePort persistencePort) {
+    public DefaultJobProcessor(List<FileReaderPort> fileReaders,
+                               PersistencePort persistencePort,
+                               ColumnAutoMapper columnAutoMapper) {
         this.fileReaders = fileReaders;
         this.persistencePort = persistencePort;
+        this.columnAutoMapper = columnAutoMapper;
     }
 
     @Override
@@ -46,11 +48,16 @@ public class DefaultJobProcessor implements JobProcessor {
             // Read data from file
             List<Action> data = readFileData(job);
 
+            // Extract Excel headers from first row
+            List<String> excelHeaders = data.isEmpty()
+                    ? List.of()
+                    : new ArrayList<>(data.get(0).data().keySet());
+
             // Process each task
             boolean hasFailure = false;
             for (Task task : job.getTasks()) {
                 try {
-                    processTask(task, data, job);
+                    processTask(task, data, excelHeaders);
                 } catch (Exception e) {
                     hasFailure = true;
                     task.addLog(LogEntry.error(task.getName(), "Task failed: " + e.getMessage(), e));
@@ -63,7 +70,6 @@ public class DefaultJobProcessor implements JobProcessor {
                 }
             }
 
-            // Determine final job status
             Status jobStatus = determineJobStatus(job, hasFailure);
             job.complete(jobStatus);
 
@@ -91,19 +97,21 @@ public class DefaultJobProcessor implements JobProcessor {
         return actions;
     }
 
-    private void processTask(Task task, List<Action> data, Job job) {
+    private void processTask(Task task, List<Action> data, List<String> excelHeaders) {
         task.start();
         log.info("Processing task: {} (type: {})", task.getName(), task.getTaskType());
 
         switch (task.getTaskType()) {
             case TRANSFORMATION -> processTransformationTask(task, data);
-            case PERSISTENCE -> processPersistenceTask(task, data, job);
+            case PERSISTENCE -> processPersistenceTask(task, data, excelHeaders);
         }
 
         if (task.getStatus() == Status.RUNNING) {
             task.complete(Status.SUCCESS);
         }
     }
+
+    // ======================== TRANSFORMATION ========================
 
     private void processTransformationTask(Task task, List<Action> data) {
         for (Step step : task.getSteps()) {
@@ -136,11 +144,13 @@ public class DefaultJobProcessor implements JobProcessor {
         }
     }
 
-    private void processPersistenceTask(Task task, List<Action> data, Job job) {
+    // ======================== PERSISTENCE ========================
+
+    private void processPersistenceTask(Task task, List<Action> data, List<String> excelHeaders) {
         for (Step step : task.getSteps()) {
             step.start();
             try {
-                executePersistenceStep(step, data);
+                executePersistenceStep(step, data, excelHeaders);
                 step.complete(Status.SUCCESS);
             } catch (Exception e) {
                 step.addLog(LogEntry.error(step.getName(), "Persistence step failed: " + e.getMessage(), e));
@@ -150,10 +160,10 @@ public class DefaultJobProcessor implements JobProcessor {
         }
     }
 
-    private void executePersistenceStep(Step step, List<Action> data) {
+    private void executePersistenceStep(Step step, List<Action> data, List<String> excelHeaders) {
         log.debug("Executing persistence step: {}", step.getStepType());
 
-        Map<String, Object> params = Map.of();
+        Map<String, Object> params = step.getParameters();
 
         switch (step.getStepType()) {
             case TRUNCATE -> {
@@ -161,9 +171,13 @@ public class DefaultJobProcessor implements JobProcessor {
                 step.addLog(LogEntry.info(step.getName(), "Table truncated"));
             }
             case INSERT -> {
-                persistencePort.insertData(data, params);
+                // Resolve mappings: auto-map Excel headers → DB columns
+                List<DatabaseMapping> mappings = resolveMappings(params, excelHeaders);
+
+                persistencePort.insertData(data, mappings, params);
                 step.getMetrics().incrementProcessed(data.size());
-                step.addLog(LogEntry.info(step.getName(), "Inserted " + data.size() + " records"));
+                step.addLog(LogEntry.info(step.getName(),
+                        "Inserted " + data.size() + " records (" + mappings.size() + " columns mapped)"));
             }
             case SELECT -> {
                 Object result = persistencePort.check(null, params);
@@ -172,6 +186,54 @@ public class DefaultJobProcessor implements JobProcessor {
             default -> step.addLog(LogEntry.warn(step.getName(),
                     "Unknown persistence type: " + step.getStepType()));
         }
+    }
+
+    /**
+     * Resolves column mappings from step parameters.
+     * If autoMap is enabled (default), uses ColumnAutoMapper to match Excel headers to DB columns.
+     * Explicit mappings from YAML are always included and take priority.
+     */
+    @SuppressWarnings("unchecked")
+    private List<DatabaseMapping> resolveMappings(Map<String, Object> params, List<String> excelHeaders) {
+        String tableName = (String) params.getOrDefault("tableName", "ingesta_data");
+        String schema = (String) params.get("schema");
+        boolean autoMap = (boolean) params.getOrDefault("autoMap", true);
+
+        // Parse explicit mappings from YAML parameters
+        List<DatabaseMapping> explicitMappings = parseExplicitMappings(params);
+
+        if (autoMap) {
+            return columnAutoMapper.resolve(excelHeaders, tableName, schema, explicitMappings);
+        }
+
+        // autoMap disabled: use only explicit mappings
+        return explicitMappings;
+    }
+
+    /**
+     * Parses the "mappings" list from step parameters into DatabaseMapping objects.
+     */
+    @SuppressWarnings("unchecked")
+    private List<DatabaseMapping> parseExplicitMappings(Map<String, Object> params) {
+        Object rawMappings = params.get("mappings");
+        if (rawMappings == null) return List.of();
+
+        if (rawMappings instanceof List<?> list) {
+            return list.stream()
+                    .filter(item -> item instanceof Map)
+                    .map(item -> {
+                        Map<String, Object> m = (Map<String, Object>) item;
+                        String excelColumn = (String) m.get("excelColumn");
+                        String dbColumn = (String) m.get("dbColumn");
+                        String autoGenerate = (String) m.get("autoGenerate");
+                        List<String> concatenate = (List<String>) m.get("concatenate");
+                        String separator = (String) m.getOrDefault("separator", "");
+                        return new DatabaseMapping(excelColumn, dbColumn, autoGenerate, concatenate, separator);
+                    })
+                    .toList();
+        }
+
+        return List.of();
     }
 
     private Status determineJobStatus(Job job, boolean hasFailure) {

@@ -10,6 +10,7 @@ source:
   locationAfterProcessing: /data/processed/
 parameters:
   tableName: employees
+  schema: INGESTA
 
 tasks:
   - name: clean-data
@@ -23,8 +24,6 @@ tasks:
       - name: uppercase-names
         order: 2
         type: UPPERCASE
-        parameters:
-          columns: "first_name,last_name"
 
   - name: persist-data
     order: 2
@@ -41,3 +40,12 @@ tasks:
         type: INSERT
         parameters:
           tableName: employees
+          schema: INGESTA
+          autoMap: true
+          # Only needed for columns that can't be auto-mapped:
+          mappings:
+            - dbColumn: "FECHA_INGESTA"
+              autoGenerate: "TIMESTAMP"
+            - dbColumn: "FULL_NAME"
+              concatenate: ["First Name", "Last Name"]
+              separator: " "

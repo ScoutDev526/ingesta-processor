@@ -1,5 +1,7 @@
 package es.ing.icenterprise.arthur.core.domain.model;
 
+import es.ing.icenterprise.arthur.core.domain.enums.*;
+
 import java.util.List;
 
 public record AggregatedMetrics(

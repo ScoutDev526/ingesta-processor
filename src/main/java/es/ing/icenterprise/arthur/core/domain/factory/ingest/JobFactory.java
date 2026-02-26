@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
@@ -58,10 +59,16 @@ public class JobFactory {
                            Map<String, Object> taskParams) {
         StepType stepType = StepType.valueOf(definition.type().toUpperCase());
 
+        // Merge parameters: job → task → step (step wins)
+        Map<String, Object> mergedParams = new HashMap<>(jobParams);
+        mergedParams.putAll(taskParams);
+        mergedParams.putAll(definition.parameters());
+
         return new Step(
                 definition.name(),
                 stepType,
-                definition.order()
+                definition.order(),
+                mergedParams
         );
     }
 
