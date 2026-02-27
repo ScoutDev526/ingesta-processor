@@ -40,7 +40,7 @@ class IngestaServiceTest {
     @BeforeEach
     void setUp() {
         jobFactory = new JobFactory();
-        when(fileDownloader.supports(any())).thenReturn(true);
+        lenient().when(fileDownloader.supports(any())).thenReturn(true);
 
         service = new IngestaService(
                 yamlScanner,

@@ -1,6 +1,7 @@
 package es.ing.icenterprise.arthur.core.domain.factory;
 
 import es.ing.icenterprise.arthur.core.domain.definition.ingest.*;
+import es.ing.icenterprise.arthur.core.domain.factory.ingest.JobFactory;
 import es.ing.icenterprise.arthur.core.domain.model.*;
 import es.ing.icenterprise.arthur.core.domain.enums.*;
 import org.junit.jupiter.api.BeforeEach;
