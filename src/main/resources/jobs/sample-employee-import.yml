@@ -1,51 +1,174 @@
+# =============================================================================
+# DEFINICIÓN DE JOB DE IMPORTACIÓN
+# =============================================================================
+# Nombre único del job. Se usa como identificador interno.
+# Tipo: String | Obligatorio
 name: employee-import
+
+# Descripción legible del propósito del job.
+# Tipo: String | Opcional
 description: Import employee data from Excel file
+
+# Controla si el job se ejecuta o se omite completamente.
+# Valores: true (se procesa) | false (se salta, estado final: SKIPPED)
+# Tipo: Boolean | Obligatorio
 enabled: true
+
+# Formato del fichero de entrada a procesar.
+# Valores permitidos:
+#   - EXCEL  → Ficheros .xlsx (Apache POI)
+#   - XML    → Ficheros XML (Jackson XML)
+# Tipo: Enum | Obligatorio
 fileType: EXCEL
+
+# Número de filas agrupadas por lote en operaciones de INSERT.
+# Valores: Cualquier entero positivo > 0
+# Por defecto: 500 (si se omite o se pone <= 0 se aplica 500 automáticamente)
+# Recomendación: valores entre 200 y 2000 según memoria disponible
+# Tipo: Integer | Opcional
 batchSize: 500
+
+# -----------------------------------------------------------------------------
+# FUENTE DEL FICHERO
+# -----------------------------------------------------------------------------
 source:
+  # Origen desde donde se obtiene el fichero.
+  # Valores permitidos:
+  #   - RESOURCES   → Sistema de ficheros local (totalmente implementado)
+  #   - SHAREPOINT  → SharePoint (definido pero NO implementado aún;
+  #                   lanza UnsupportedOperationException)
+  # Tipo: Enum | Obligatorio
   type: RESOURCES
+
   location:
+    # Ruta absoluta al fichero de entrada.
+    # Tipo: String | Obligatorio
     path: /data/employees.xlsx
+
+  # Directorio al que se mueve el fichero tras procesarse con éxito.
+  # Si se omite, el fichero permanece en su ubicación original.
+  # Tipo: String | Opcional
   locationAfterProcessing: /data/processed/
+
+# -----------------------------------------------------------------------------
+# PARÁMETROS GLOBALES DEL JOB
+# Los parámetros definidos aquí son heredados por todas las tareas y subtareas,
+# pero pueden ser sobreescritos a nivel de tarea o subtarea.
+# -----------------------------------------------------------------------------
 parameters:
+  # Nombre de la tabla destino en la base de datos.
+  # Tipo: String | Opcional (requerido si se usa INSERT/TRUNCATE/SELECT)
   tableName: employees
+
+  # Esquema de base de datos donde reside la tabla destino.
+  # Si se omite se usa el esquema por defecto de la conexión.
+  # Tipo: String | Opcional
   schema: INGESTA
 
+# =============================================================================
+# TAREAS
+# Se ejecutan en el orden indicado por el campo `order` (ascendente).
+# =============================================================================
 tasks:
-  - name: clean-data
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # Aplica transformaciones columna a columna antes de persistir.
+  # ---------------------------------------------------------------------------
+  - name: clean-data           # Nombre identificativo de la tarea. Tipo: String | Obligatorio
+
+    # Orden de ejecución relativo a las demás tareas. Menor número = antes.
+    # Tipo: Integer | Obligatorio
     order: 1
+
+    # Tipo de tarea.
+    # Valores permitidos:
+    #   - TRANSFORMATION  → Aplica transformaciones sobre los datos en memoria
+    #   - PERSISTENCE     → Opera contra la base de datos (INSERT, TRUNCATE, SELECT)
+    # Tipo: Enum | Obligatorio
     type: TRANSFORMATION
+
+    # Si la tarea falla, ¿se detiene el job?
+    # Valores:
+    #   - true   → El job se detiene; las tareas siguientes NO se ejecutan
+    #   - false  → El job continúa con la siguiente tarea (estado puede quedar PARTIAL)
+    # Tipo: Boolean | Opcional (por defecto: false)
     stopOnFailure: true
+
     subtasks:
+      # ---- Subtarea 1.1: Eliminar espacios en blanco ----
       - name: trim-whitespace
         order: 1
+        # Tipo de subtarea (StepType).
+        # Tipos válidos para tareas TRANSFORMATION:
+        #   - TRIM         → Elimina espacios al inicio y al final de campos String
+        #   - UPPERCASE    → Convierte campos String a mayúsculas
+        #   - CONCATENATE  → Une varias columnas en una (requiere parámetros específicos)
         type: TRIM
+
+      # ---- Subtarea 1.2: Convertir nombres a mayúsculas ----
       - name: uppercase-names
         order: 2
         type: UPPERCASE
 
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
   - name: persist-data
     order: 2
     type: PERSISTENCE
     stopOnFailure: true
+
     subtasks:
+      # ---- Subtarea 2.1: Vaciar la tabla antes de insertar ----
       - name: truncate-table
         order: 1
+        # Tipos válidos para tareas PERSISTENCE:
+        #   - TRUNCATE  → Borra todos los registros de la tabla indicada
+        #   - INSERT    → Inserta los datos procesados en la tabla
+        #   - SELECT    → Ejecuta una consulta de verificación (no inserta datos)
         type: TRUNCATE
         parameters:
-          tableName: employees
+          tableName: employees   # Sobreescribe el tableName global para esta subtarea
+
+      # ---- Subtarea 2.2: Insertar los registros ----
       - name: insert-records
         order: 2
         type: INSERT
         parameters:
           tableName: employees
           schema: INGESTA
+
+          # Si true, el sistema lee los nombres de columna de la tabla destino,
+          # normaliza las cabeceras del Excel a UPPER_SNAKE_CASE y crea mapeos
+          # automáticos. Los mapeos explícitos de `mappings` tienen prioridad.
+          # Si false, SOLO se usan los mapeos definidos explícitamente en `mappings`.
+          # Tipo: Boolean | Opcional (por defecto: false)
           autoMap: true
-          # Only needed for columns that can't be auto-mapped:
+
+          # Lista de mapeos explícitos. Útil para columnas que autoMap no puede
+          # resolver (columnas generadas, concatenaciones, nombres muy distintos).
+          # Solo es necesario definir aquí lo que autoMap no puede inferir.
+          # Tipo: List | Opcional
           mappings:
+            # -- Tipo 1: Columna autogenerada --
+            # No requiere columna en el Excel; el valor lo genera el sistema.
+            # `autoGenerate` valores permitidos:
+            #   - TIMESTAMP  → Fecha y hora actuales en el momento de la ingesta
+            #   - UUID       → Identificador único universal (UUID v4)
             - dbColumn: "FECHA_INGESTA"
               autoGenerate: "TIMESTAMP"
+
+            # -- Tipo 2: Concatenación de columnas del Excel --
+            # Une los valores de varias columnas del Excel en una sola columna DB.
+            # `concatenate`: lista de cabeceras exactas del Excel a combinar.
+            # `separator`:   cadena que se inserta entre los valores (por defecto: "")
             - dbColumn: "FULL_NAME"
               concatenate: ["First Name", "Last Name"]
               separator: " "
+
+            # -- Tipo 3 (no mostrado aquí): Mapeo explícito simple --
+            # Útil cuando la cabecera del Excel y la columna DB tienen nombres
+            # muy distintos y autoMap no los empareja correctamente.
+            # Ejemplo:
+            # - excelColumn: "Nombre del Empleado"
+            #   dbColumn: "EMPLOYEE_NAME"
