@@ -1,6 +1,6 @@
 package es.ing.icenterprise.arthur.adapters.outbound.yaml;
 
-import es.ing.icenterprise.arthur.core.ports.YamlScannerPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.YamlScannerPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

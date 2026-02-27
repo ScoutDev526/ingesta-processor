@@ -1,4 +1,4 @@
-package es.ing.icenterprise.arthur.core.usecases;
+package es.ing.icenterprise.arthur.core.ports.inbound;
 
 import es.ing.icenterprise.arthur.core.domain.model.ProcessReport;
 

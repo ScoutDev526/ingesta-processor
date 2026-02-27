@@ -1,8 +1,8 @@
 package es.ing.icenterprise.arthur.adapters.inbound.scheduler;
 
 import es.ing.icenterprise.arthur.core.domain.model.ProcessReport;
-import es.ing.icenterprise.arthur.core.usecases.ExecuteCommand;
-import es.ing.icenterprise.arthur.core.usecases.ExecuteProcessUseCase;
+import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteCommand;
+import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteProcessUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

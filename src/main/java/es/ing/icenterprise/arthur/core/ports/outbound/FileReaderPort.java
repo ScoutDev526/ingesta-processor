@@ -1,4 +1,4 @@
-package es.ing.icenterprise.arthur.core.ports;
+package es.ing.icenterprise.arthur.core.ports.outbound;
 
 import es.ing.icenterprise.arthur.core.domain.model.FileMetadata;
 import es.ing.icenterprise.arthur.core.domain.enums.FileType;

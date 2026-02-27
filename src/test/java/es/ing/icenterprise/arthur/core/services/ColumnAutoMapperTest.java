@@ -1,7 +1,7 @@
 package es.ing.icenterprise.arthur.core.services;
 
 import es.ing.icenterprise.arthur.core.domain.model.DatabaseMapping;
-import es.ing.icenterprise.arthur.core.ports.TableMetadataPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.TableMetadataPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

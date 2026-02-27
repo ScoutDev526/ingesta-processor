@@ -2,8 +2,8 @@ package es.ing.icenterprise.arthur.core.services;
 
 import es.ing.icenterprise.arthur.core.domain.model.*;
 import es.ing.icenterprise.arthur.core.domain.enums.*;
-import es.ing.icenterprise.arthur.core.ports.FileReaderPort;
-import es.ing.icenterprise.arthur.core.ports.PersistencePort;
+import es.ing.icenterprise.arthur.core.ports.outbound.FileReaderPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.PersistencePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

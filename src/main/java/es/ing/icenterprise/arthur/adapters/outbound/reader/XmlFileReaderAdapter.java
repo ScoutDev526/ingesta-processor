@@ -2,7 +2,7 @@ package es.ing.icenterprise.arthur.adapters.outbound.reader;
 
 import es.ing.icenterprise.arthur.core.domain.model.FileMetadata;
 import es.ing.icenterprise.arthur.core.domain.enums.FileType;
-import es.ing.icenterprise.arthur.core.ports.FileReaderPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.FileReaderPort;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
