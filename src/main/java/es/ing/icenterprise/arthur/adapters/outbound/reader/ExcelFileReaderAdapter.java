@@ -4,7 +4,7 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.read.listener.PageReadListener;
 import es.ing.icenterprise.arthur.core.domain.model.FileMetadata;
 import es.ing.icenterprise.arthur.core.domain.enums.FileType;
-import es.ing.icenterprise.arthur.core.ports.FileReaderPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.FileReaderPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

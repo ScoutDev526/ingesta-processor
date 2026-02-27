@@ -1,7 +1,7 @@
 package es.ing.icenterprise.arthur.adapters.outbound.persistence;
 
 import es.ing.icenterprise.arthur.core.domain.model.ProcessReport;
-import es.ing.icenterprise.arthur.core.ports.ProcessReportRepository;
+import es.ing.icenterprise.arthur.core.ports.outbound.ProcessReportRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;

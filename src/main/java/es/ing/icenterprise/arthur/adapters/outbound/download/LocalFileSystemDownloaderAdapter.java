@@ -2,7 +2,7 @@ package es.ing.icenterprise.arthur.adapters.outbound.download;
 
 import es.ing.icenterprise.arthur.core.domain.definition.ingest.FileSourceDefinition;
 import es.ing.icenterprise.arthur.core.domain.definition.ingest.FileSourceType;
-import es.ing.icenterprise.arthur.core.ports.FileDownloaderPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.FileDownloaderPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

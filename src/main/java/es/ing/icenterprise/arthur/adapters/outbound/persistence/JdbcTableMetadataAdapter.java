@@ -1,6 +1,6 @@
 package es.ing.icenterprise.arthur.adapters.outbound.persistence;
 
-import es.ing.icenterprise.arthur.core.ports.TableMetadataPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.TableMetadataPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

@@ -1,6 +1,6 @@
 package es.ing.icenterprise.arthur.adapters.outbound.cleanup;
 
-import es.ing.icenterprise.arthur.core.ports.CleanupWorkingDirectoryPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.CleanupWorkingDirectoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

@@ -3,7 +3,7 @@ package es.ing.icenterprise.arthur.adapters.outbound.report;
 import es.ing.icenterprise.arthur.core.domain.enums.ExportFormat;
 import es.ing.icenterprise.arthur.core.domain.model.JobSummary;
 import es.ing.icenterprise.arthur.core.domain.model.ProcessReport;
-import es.ing.icenterprise.arthur.core.ports.ReportExporterPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.ReportExporterPort;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;

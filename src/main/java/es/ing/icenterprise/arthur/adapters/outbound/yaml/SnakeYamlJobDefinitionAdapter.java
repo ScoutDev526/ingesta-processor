@@ -2,7 +2,7 @@ package es.ing.icenterprise.arthur.adapters.outbound.yaml;
 
 import es.ing.icenterprise.arthur.core.domain.definition.ingest.*;
 import es.ing.icenterprise.arthur.core.domain.enums.FileType;
-import es.ing.icenterprise.arthur.core.ports.JobDefinitionLoaderPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.JobDefinitionLoaderPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

@@ -1,6 +1,6 @@
 package es.ing.icenterprise.arthur.core.services;
 
-import es.ing.icenterprise.arthur.core.usecases.ExecuteCommand;
+import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteCommand;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

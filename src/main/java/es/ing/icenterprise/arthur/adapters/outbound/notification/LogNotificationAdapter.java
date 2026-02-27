@@ -2,7 +2,7 @@ package es.ing.icenterprise.arthur.adapters.outbound.notification;
 
 import es.ing.icenterprise.arthur.core.domain.enums.NotificationType;
 import es.ing.icenterprise.arthur.core.domain.model.ProcessReport;
-import es.ing.icenterprise.arthur.core.ports.NotificationPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.NotificationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

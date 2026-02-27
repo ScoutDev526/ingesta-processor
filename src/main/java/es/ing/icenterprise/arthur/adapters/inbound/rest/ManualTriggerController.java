@@ -1,8 +1,8 @@
 package es.ing.icenterprise.arthur.adapters.inbound.rest;
 
 import es.ing.icenterprise.arthur.core.domain.model.ProcessReport;
-import es.ing.icenterprise.arthur.core.usecases.ExecuteCommand;
-import es.ing.icenterprise.arthur.core.usecases.ExecuteProcessUseCase;
+import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteCommand;
+import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteProcessUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

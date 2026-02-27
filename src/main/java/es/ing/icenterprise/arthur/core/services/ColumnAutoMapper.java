@@ -1,7 +1,7 @@
 package es.ing.icenterprise.arthur.core.services;
 
 import es.ing.icenterprise.arthur.core.domain.model.DatabaseMapping;
-import es.ing.icenterprise.arthur.core.ports.TableMetadataPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.TableMetadataPort;
 import es.ing.icenterprise.arthur.core.utils.ColumnNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
