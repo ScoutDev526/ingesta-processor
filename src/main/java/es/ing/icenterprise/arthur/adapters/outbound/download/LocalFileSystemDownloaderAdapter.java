@@ -9,7 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.*;
 
@@ -52,10 +53,14 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
         // 2. Try from classpath (resources folder, useful in debug/IDE)
         URL classpathUrl = getClass().getClassLoader().getResource(resourcePath);
         if (classpathUrl != null) {
-            Path classpathPath = Path.of(classpathUrl.getPath());
-            if (Files.exists(classpathPath)) {
-                log.info("Resolved from classpath: {}", classpathPath);
-                return classpathPath;
+            try {
+                Path classpathPath = Path.of(classpathUrl.toURI());
+                if (Files.exists(classpathPath)) {
+                    log.info("Resolved from classpath: {}", classpathPath);
+                    return classpathPath;
+                }
+            } catch (URISyntaxException e) {
+                log.warn("Failed to convert classpath URL to path: {}", classpathUrl, e);
             }
         }
 
