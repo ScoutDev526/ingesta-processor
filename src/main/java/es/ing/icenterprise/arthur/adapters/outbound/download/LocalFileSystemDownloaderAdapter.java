@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.*;
 
 @Component
@@ -21,17 +23,14 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
 
     @Override
     public Path download(FileSourceDefinition source) {
-        Path sourcePath = Path.of(source.location().path());
-        log.info("Copying local file from: {}", sourcePath);
-
-        if (!Files.exists(sourcePath)) {
-            throw new RuntimeException("File not found: " + sourcePath);
-        }
+        String resourcePath = source.location().path();
+        log.info("Resolving file from: {}", resourcePath);
 
         try {
             Path workDir = Path.of(workingDirectory);
             Files.createDirectories(workDir);
 
+            Path sourcePath = resolveSource(resourcePath);
             Path targetPath = workDir.resolve(sourcePath.getFileName());
             Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
 
@@ -40,6 +39,27 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
         } catch (IOException e) {
             throw new RuntimeException("Failed to copy file to working directory", e);
         }
+    }
+
+    private Path resolveSource(String resourcePath) {
+        // 1. Try as absolute/relative filesystem path
+        Path fsPath = Path.of(resourcePath);
+        if (Files.exists(fsPath)) {
+            log.info("Resolved as filesystem path: {}", fsPath);
+            return fsPath;
+        }
+
+        // 2. Try from classpath (resources folder, useful in debug/IDE)
+        URL classpathUrl = getClass().getClassLoader().getResource(resourcePath);
+        if (classpathUrl != null) {
+            Path classpathPath = Path.of(classpathUrl.getPath());
+            if (Files.exists(classpathPath)) {
+                log.info("Resolved from classpath: {}", classpathPath);
+                return classpathPath;
+            }
+        }
+
+        throw new RuntimeException("File not found in filesystem nor classpath: " + resourcePath);
     }
 
     @Override
