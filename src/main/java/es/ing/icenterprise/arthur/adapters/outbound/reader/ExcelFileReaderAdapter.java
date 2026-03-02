@@ -36,7 +36,7 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
         List<String> headers = new ArrayList<>();
 
         try (Workbook workbook = WorkbookFactory.create(filePath.toFile())) {
-            Sheet sheet = workbook.getSheetAt(0);
+            Sheet sheet = workbook.getSheetAt(3);
 
             for (Row row : sheet) {
                 Map<Integer, Object> rowData = new LinkedHashMap<>();
@@ -113,7 +113,7 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
             case STRING  -> cell.getStringCellValue();
             case NUMERIC -> {
                 if (DateUtil.isCellDateFormatted(cell)) {
-                    yield cell.getLocalDateTimeCellValue().toString();
+                    yield java.sql.Timestamp.valueOf(cell.getLocalDateTimeCellValue());
                 }
                 yield cell.getNumericCellValue();
             }
