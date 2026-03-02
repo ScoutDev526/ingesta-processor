@@ -70,8 +70,18 @@ public class JdbcPersistenceAdapter implements PersistencePort {
     @Override
     public void truncate(Map<String, Object> parameters) {
         String tableName = (String) parameters.getOrDefault("tableName", "ingesta_data");
-        log.info("Truncating table: {}", tableName);
-        jdbcTemplate.execute("TRUNCATE TABLE " + tableName);
+        String timestampColumn = (String) parameters.get("timestampColumn");
+
+        if (timestampColumn != null) {
+            java.sql.Timestamp today = java.sql.Timestamp.valueOf(LocalDate.now().atStartOfDay());
+            log.info("Deleting today's records from {} where {} = {}", tableName, timestampColumn, today);
+            int deleted = jdbcTemplate.update(
+                    "DELETE FROM " + tableName + " WHERE " + timestampColumn + " = ?", today);
+            log.info("Deleted {} records from {}", deleted, tableName);
+        } else {
+            log.info("Truncating table: {}", tableName);
+            jdbcTemplate.execute("TRUNCATE TABLE " + tableName);
+        }
     }
 
     /**
