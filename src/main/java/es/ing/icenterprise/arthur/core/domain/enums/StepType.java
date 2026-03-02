@@ -5,6 +5,7 @@ public enum StepType {
     TRIM,
     UPPERCASE,
     CONCATENATE,
+    DEDUPLICATE,
     // Persistence types
     SELECT,
     INSERT,

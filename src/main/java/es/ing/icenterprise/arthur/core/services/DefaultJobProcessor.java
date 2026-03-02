@@ -164,6 +164,20 @@ public class DefaultJobProcessor implements JobProcessor {
                 step.addLog(LogEntry.info(step.getName(),
                         "Concatenated " + sources + " → '" + targetColumn + "' for " + data.size() + " rows"));
             }
+            case DEDUPLICATE -> {
+                String keyColumn = (String) step.getParameters().get("keyColumn");
+                if (keyColumn == null) {
+                    step.addLog(LogEntry.warn(step.getName(),
+                            "DEDUPLICATE step missing required parameter: 'keyColumn'"));
+                    break;
+                }
+                int before = data.size();
+                Set<Object> seen = new LinkedHashSet<>();
+                data.removeIf(action -> !seen.add(action.get(keyColumn)));
+                int removed = before - data.size();
+                step.addLog(LogEntry.info(step.getName(),
+                        "Deduplicated on '" + keyColumn + "': removed " + removed + " duplicates, " + data.size() + " remaining"));
+            }
             default -> step.addLog(LogEntry.warn(step.getName(),
                     "Unknown transformation type: " + step.getStepType()));
         }
