@@ -140,13 +140,13 @@ public class DefaultJobProcessor implements JobProcessor {
                     action.data().replaceAll((k, v) -> v instanceof String s ? s.toUpperCase() : v));
             case CONCATENATE -> {
                 @SuppressWarnings("unchecked")
-                List<String> sources = (List<String>) step.getParameters().get("sources");
+                List<String> sources = (List<String>) step.getParameters().get("sourceColumns");
                 String targetColumn = (String) step.getParameters().get("targetColumn");
                 String separator = (String) step.getParameters().getOrDefault("separator", "");
 
                 if (targetColumn == null || sources == null || sources.isEmpty()) {
                     step.addLog(LogEntry.warn(step.getName(),
-                            "CONCATENATE step missing required parameters: 'targetColumn' and 'sources'"));
+                            "CONCATENATE step missing required parameters: 'targetColumn' and 'sourceColumns'"));
                     break;
                 }
 
@@ -162,7 +162,7 @@ public class DefaultJobProcessor implements JobProcessor {
                 });
 
                 step.addLog(LogEntry.info(step.getName(),
-                        "Concatenated " + sources + " → '" + targetColumn + "' for " + data.size() + " rows"));
+                        "Concatenated sourceColumns=" + sources + " → '" + targetColumn + "' for " + data.size() + " rows"));
             }
             case DEDUPLICATE -> {
                 String keyColumn = (String) step.getParameters().get("keyColumn");
