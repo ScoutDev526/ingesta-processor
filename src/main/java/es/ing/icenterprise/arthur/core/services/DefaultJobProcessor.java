@@ -9,7 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -17,6 +19,7 @@ import java.util.stream.Stream;
 public class DefaultJobProcessor implements JobProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultJobProcessor.class);
+    private static final Pattern DATE_IN_FILENAME = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
 
     private final List<FileReaderPort> fileReaders;
     private final PersistencePort persistencePort;
@@ -54,11 +57,14 @@ public class DefaultJobProcessor implements JobProcessor {
                     ? List.of()
                     : new ArrayList<>(data.get(0).data().keySet());
 
+            // Extract ingest date from filename (e.g. 2026-03-02-Name.xlsx), fallback to today
+            LocalDate ingestDate = extractIngestDate(job.getFilePath());
+
             // Process each task
             boolean hasFailure = false;
             for (Task task : job.getTasks()) {
                 try {
-                    processTask(task, data, excelHeaders);
+                    processTask(task, data, excelHeaders, ingestDate);
                 } catch (Exception e) {
                     hasFailure = true;
                     task.addLog(LogEntry.error(task.getName(), "Task failed: " + e.getMessage(), e));
@@ -98,13 +104,13 @@ public class DefaultJobProcessor implements JobProcessor {
         return actions;
     }
 
-    private void processTask(Task task, List<Action> data, List<String> excelHeaders) {
+    private void processTask(Task task, List<Action> data, List<String> excelHeaders, LocalDate ingestDate) {
         task.start();
         log.info("Processing task: {} (type: {})", task.getName(), task.getTaskType());
 
         switch (task.getTaskType()) {
             case TRANSFORMATION -> processTransformationTask(task, data);
-            case PERSISTENCE -> processPersistenceTask(task, data, excelHeaders);
+            case PERSISTENCE -> processPersistenceTask(task, data, excelHeaders, ingestDate);
         }
 
         if (task.getStatus() == Status.RUNNING) {
@@ -185,11 +191,11 @@ public class DefaultJobProcessor implements JobProcessor {
 
     // ======================== PERSISTENCE ========================
 
-    private void processPersistenceTask(Task task, List<Action> data, List<String> excelHeaders) {
+    private void processPersistenceTask(Task task, List<Action> data, List<String> excelHeaders, LocalDate ingestDate) {
         for (Step step : task.getSteps()) {
             step.start();
             try {
-                executePersistenceStep(step, data, excelHeaders);
+                executePersistenceStep(step, data, excelHeaders, ingestDate);
                 step.complete(Status.SUCCESS);
             } catch (Exception e) {
                 step.addLog(LogEntry.error(step.getName(), "Persistence step failed: " + e.getMessage(), e));
@@ -199,10 +205,11 @@ public class DefaultJobProcessor implements JobProcessor {
         }
     }
 
-    private void executePersistenceStep(Step step, List<Action> data, List<String> excelHeaders) {
+    private void executePersistenceStep(Step step, List<Action> data, List<String> excelHeaders, LocalDate ingestDate) {
         log.debug("Executing persistence step: {}", step.getStepType());
 
-        Map<String, Object> params = step.getParameters();
+        Map<String, Object> params = new HashMap<>(step.getParameters());
+        params.put("_ingestDate", ingestDate);
 
         switch (step.getStepType()) {
             case TRUNCATE -> {
@@ -273,6 +280,30 @@ public class DefaultJobProcessor implements JobProcessor {
         }
 
         return List.of();
+    }
+
+    /**
+     * Extracts the ingest date from the filename (pattern YYYY-MM-DD anywhere in the name).
+     * Falls back to today if no date is found or it cannot be parsed.
+     * Examples: "2026-03-02-Audits.xlsx" → 2026-03-02
+     *           "Audits.xlsx"            → LocalDate.now()
+     */
+    private LocalDate extractIngestDate(String filePath) {
+        String fileName = Path.of(filePath).getFileName().toString();
+        java.util.regex.Matcher matcher = DATE_IN_FILENAME.matcher(fileName);
+        if (matcher.find()) {
+            try {
+                LocalDate date = LocalDate.parse(matcher.group(1));
+                log.info("Ingest date extracted from filename '{}': {}", fileName, date);
+                return date;
+            } catch (Exception e) {
+                log.warn("Found '{}' in filename '{}' but could not parse as date, using today",
+                        matcher.group(1), fileName);
+            }
+        } else {
+            log.info("No date pattern found in filename '{}', using today as ingest date", fileName);
+        }
+        return LocalDate.now();
     }
 
     private Status determineJobStatus(Job job, boolean hasFailure) {
