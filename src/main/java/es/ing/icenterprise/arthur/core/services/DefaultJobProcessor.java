@@ -229,6 +229,7 @@ public class DefaultJobProcessor implements JobProcessor {
                 Object result = persistencePort.check(null, params);
                 step.addLog(LogEntry.info(step.getName(), "Check completed"));
             }
+            case LINK_PARENT -> executeLinkParent(step, data, params);
             default -> step.addLog(LogEntry.warn(step.getName(),
                     "Unknown persistence type: " + step.getStepType()));
         }
@@ -280,6 +281,78 @@ public class DefaultJobProcessor implements JobProcessor {
         }
 
         return List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void executeLinkParent(Step step, List<Action> data, Map<String, Object> params) {
+        String idColumn          = (String) params.get("idColumn");
+        String parentPathColumn  = (String) params.get("parentPathColumn");
+        String parentObjColumn   = (String) params.get("parentObjectsColumn");
+        String parentTypeColumn  = (String) params.get("parentTypeColumn");
+        String separator         = (String) params.getOrDefault("separator", "/");
+        String checkIdColumn     = (String) params.getOrDefault("checkIdColumn", "ID");
+        String id1Column         = (String) params.getOrDefault("id1Column", "ID_1");
+        String id2Column         = (String) params.getOrDefault("id2Column", "ID_2");
+        String timestampColumn   = (String) params.getOrDefault("timestampColumn", "TIMESTAMP");
+        String schema            = (String) params.get("schema");
+        LocalDate ingestDate     = (LocalDate) params.getOrDefault("_ingestDate", LocalDate.now());
+
+        List<Map<String, Object>> rules = (List<Map<String, Object>>) params.get("rules");
+
+        int linked = 0, notFound = 0, unknownType = 0;
+
+        for (Action action : data) {
+            Object parentTypeVal = action.get(parentTypeColumn);
+            if (parentTypeVal == null || parentTypeVal.toString().isBlank()) continue;
+
+            String parentType = parentTypeVal.toString().trim();
+            String parentId   = buildParentId(action, parentPathColumn, parentObjColumn, separator);
+            String currentId  = String.valueOf(action.get(idColumn));
+
+            Map<String, Object> rule = findRule(rules, parentType);
+
+            if (rule != null) {
+                String checkTable    = (String) rule.get("checkTable");
+                String relationTable = (String) rule.get("relationTable");
+
+                boolean exists = persistencePort.checkExists(
+                        checkTable, schema, checkIdColumn, parentId, timestampColumn, ingestDate);
+
+                if (exists) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put(id1Column, currentId);
+                    row.put(id2Column, parentId);
+                    row.put(timestampColumn, ingestDate);
+                    persistencePort.insertRow(relationTable, schema, row);
+                    linked++;
+                } else {
+                    log.warn("LINK_PARENT [{}]: parent '{}' not found in '{}'. Record ID='{}'",
+                            parentType, parentId, checkTable, currentId);
+                    notFound++;
+                }
+            } else {
+                log.warn("LINK_PARENT: unknown parentType='{}'. Record ID='{}'", parentType, currentId);
+                unknownType++;
+            }
+        }
+
+        step.addLog(LogEntry.info(step.getName(), String.format(
+                "LINK_PARENT: %d linked, %d parent not found, %d unknown parentType",
+                linked, notFound, unknownType)));
+    }
+
+    private String buildParentId(Action action, String pathColumn, String objectsColumn, String separator) {
+        Object path    = action.get(pathColumn);
+        Object objects = action.get(objectsColumn);
+        return (path != null ? path.toString() : "") + separator + (objects != null ? objects.toString() : "");
+    }
+
+    private Map<String, Object> findRule(List<Map<String, Object>> rules, String parentType) {
+        if (rules == null) return null;
+        return rules.stream()
+                .filter(r -> parentType.equals(r.get("parentType")))
+                .findFirst()
+                .orElse(null);
     }
 
     /**

@@ -3,6 +3,7 @@ package es.ing.icenterprise.arthur.core.ports.outbound;
 import es.ing.icenterprise.arthur.core.domain.model.Action;
 import es.ing.icenterprise.arthur.core.domain.model.DatabaseMapping;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -24,4 +25,15 @@ public interface PersistencePort {
     Object check(Object data, Map<String, Object> parameters);
 
     void truncate(Map<String, Object> parameters);
+
+    /**
+     * Checks whether a record exists in a table matching idColumn = idValue AND timestampColumn = date.
+     */
+    boolean checkExists(String tableName, String schema, String idColumn, Object idValue,
+                        String timestampColumn, LocalDate date);
+
+    /**
+     * Inserts a single row with raw column→value pairs. LocalDate values are stored as TIMESTAMP at midnight.
+     */
+    void insertRow(String tableName, String schema, Map<String, Object> columnValues);
 }

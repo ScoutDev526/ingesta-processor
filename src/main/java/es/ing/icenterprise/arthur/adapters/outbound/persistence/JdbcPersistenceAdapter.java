@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
 @Component
@@ -128,6 +129,35 @@ public class JdbcPersistenceAdapter implements PersistencePort {
                 yield null;
             }
         };
+    }
+
+    @Override
+    public boolean checkExists(String tableName, String schema, String idColumn, Object idValue,
+                               String timestampColumn, LocalDate date) {
+        String fullTable = schema != null ? schema + "." + tableName : tableName;
+        String sql = "SELECT COUNT(*) FROM " + fullTable
+                + " WHERE " + idColumn + " = ? AND " + timestampColumn + " = ?";
+        Timestamp ts = Timestamp.valueOf(date.atStartOfDay());
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, idValue, ts);
+        return count != null && count > 0;
+    }
+
+    @Override
+    public void insertRow(String tableName, String schema, Map<String, Object> columnValues) {
+        String fullTable = schema != null ? schema + "." + tableName : tableName;
+        List<String> columns = new ArrayList<>(columnValues.keySet());
+        String placeholders = columns.stream().map(c -> "?").collect(Collectors.joining(", "));
+        String sql = "INSERT INTO " + fullTable + " (" + String.join(", ", columns) + ") VALUES (" + placeholders + ")";
+
+        Object[] args = columns.stream()
+                .map(col -> {
+                    Object v = columnValues.get(col);
+                    return v instanceof LocalDate ld ? Timestamp.valueOf(ld.atStartOfDay()) : v;
+                })
+                .toArray();
+
+        jdbcTemplate.update(sql, args);
+        log.debug("Inserted row into {}: {}", fullTable, columnValues);
     }
 
     private Object resolveConcatenated(Action action, DatabaseMapping mapping) {
