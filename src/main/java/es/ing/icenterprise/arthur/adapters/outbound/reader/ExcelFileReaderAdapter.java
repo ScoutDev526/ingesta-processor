@@ -45,18 +45,16 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
                 }
 
                 if (headers.isEmpty()) {
-                    // First row: use as headers if they look like strings
-                    boolean allStrings = rowData.values().stream()
-                            .allMatch(v -> v instanceof String);
-                    if (allStrings) {
-                        rowData.values().forEach(v -> headers.add(v.toString()));
-                        continue;
-                    } else {
-                        // Generate default headers
-                        for (int i = 0; i < rowData.size(); i++) {
-                            headers.add("column_" + i);
-                        }
+                    // First row: always use as headers (null/blank cells get a positional fallback)
+                    int maxCol = rowData.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1);
+                    for (int i = 0; i <= maxCol; i++) {
+                        Object val = rowData.get(i);
+                        String header = (val != null && !val.toString().isBlank())
+                                ? val.toString().strip()
+                                : "column_" + i;
+                        headers.add(header);
                     }
+                    continue;
                 }
 
                 Map<String, Object> mappedRow = new LinkedHashMap<>();

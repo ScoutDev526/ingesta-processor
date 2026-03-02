@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Component
@@ -137,8 +138,32 @@ public class DefaultJobProcessor implements JobProcessor {
                     action.data().replaceAll((k, v) -> v instanceof String s ? s.trim() : v));
             case UPPERCASE -> data.forEach(action ->
                     action.data().replaceAll((k, v) -> v instanceof String s ? s.toUpperCase() : v));
-            case CONCATENATE -> step.addLog(LogEntry.info(step.getName(),
-                    "Concatenation applied based on step parameters"));
+            case CONCATENATE -> {
+                @SuppressWarnings("unchecked")
+                List<String> sources = (List<String>) step.getParameters().get("sources");
+                String targetColumn = (String) step.getParameters().get("targetColumn");
+                String separator = (String) step.getParameters().getOrDefault("separator", "");
+
+                if (targetColumn == null || sources == null || sources.isEmpty()) {
+                    step.addLog(LogEntry.warn(step.getName(),
+                            "CONCATENATE step missing required parameters: 'targetColumn' and 'sources'"));
+                    break;
+                }
+
+                data.forEach(action -> {
+                    String concatenated = sources.stream()
+                            .map(col -> {
+                                Object val = action.get(col);
+                                return val != null ? val.toString() : "";
+                            })
+                            .filter(s -> !s.isBlank())
+                            .collect(Collectors.joining(separator));
+                    action.data().put(targetColumn, concatenated);
+                });
+
+                step.addLog(LogEntry.info(step.getName(),
+                        "Concatenated " + sources + " → '" + targetColumn + "' for " + data.size() + " rows"));
+            }
             default -> step.addLog(LogEntry.warn(step.getName(),
                     "Unknown transformation type: " + step.getStepType()));
         }
