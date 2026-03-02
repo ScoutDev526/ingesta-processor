@@ -24,11 +24,17 @@ public class JobFactory {
         Job job = new Job(
                 definition.name(),
                 dataFilePath.toString(),
-                definition.fileType()
+                definition.fileType(),
+                definition.batchSize(),
+                definition.sheetIndex()
         );
 
+        // Inject _batchSize into job-level params so INSERT steps can chunk by it
+        Map<String, Object> jobParamsWithInternals = new HashMap<>(definition.parameters());
+        jobParamsWithInternals.put("_batchSize", definition.batchSize());
+
         for (TaskDefinition taskDef : definition.tasks()) {
-            Task task = createTask(taskDef, definition.parameters());
+            Task task = createTask(taskDef, jobParamsWithInternals);
             job.addTask(task);
         }
 

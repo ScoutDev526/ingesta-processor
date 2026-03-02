@@ -14,6 +14,11 @@ public interface FileReaderPort {
 
     Stream<Map<String, Object>> read(Path filePath);
 
+    /** Read with extra reader params (e.g. {@code sheetIndex} for Excel). */
+    default Stream<Map<String, Object>> read(Path filePath, Map<String, Object> params) {
+        return read(filePath);
+    }
+
     FileMetadata readFileMetadata(Path filePath);
 
     boolean supports(FileType type);

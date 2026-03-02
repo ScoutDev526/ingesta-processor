@@ -18,6 +18,7 @@ ingesta:
   jobs:
     path: classpath:jobs
   working-directory: /tmp/ingesta
+  parallel-jobs: 1
   scheduler:
     enabled: false
     cron: "0 0 2 * * ?"

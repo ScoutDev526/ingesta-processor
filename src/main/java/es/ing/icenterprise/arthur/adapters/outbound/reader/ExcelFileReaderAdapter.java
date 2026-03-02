@@ -30,13 +30,23 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
 
     @Override
     public Stream<Map<String, Object>> read(Path filePath) {
-        log.info("Reading Excel file: {}", filePath);
+        return readInternal(filePath, 0);
+    }
+
+    @Override
+    public Stream<Map<String, Object>> read(Path filePath, Map<String, Object> params) {
+        int sheetIndex = ((Number) params.getOrDefault("sheetIndex", 0)).intValue();
+        return readInternal(filePath, sheetIndex);
+    }
+
+    private Stream<Map<String, Object>> readInternal(Path filePath, int sheetIndex) {
+        log.info("Reading Excel file: {} (sheet {})", filePath, sheetIndex);
 
         List<Map<String, Object>> rows = new ArrayList<>();
         List<String> headers = new ArrayList<>();
 
         try (Workbook workbook = WorkbookFactory.create(filePath.toFile())) {
-            Sheet sheet = workbook.getSheetAt(3);
+            Sheet sheet = workbook.getSheetAt(sheetIndex);
 
             for (Row row : sheet) {
                 Map<Integer, Object> rowData = new LinkedHashMap<>();
@@ -78,7 +88,7 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
             throw new RuntimeException("Failed to read Excel file: " + filePath, e);
         }
 
-        log.info("Read {} rows from Excel file", rows.size());
+        log.info("Read {} data rows from Excel file (sheet {})", rows.size(), sheetIndex);
         return rows.stream();
     }
 
@@ -86,14 +96,35 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
     public FileMetadata readFileMetadata(Path filePath) {
         try {
             long fileSize = Files.size(filePath);
-            // Quick count: read and count rows
-            long records = 0;
-            try (Stream<Map<String, Object>> stream = read(filePath)) {
-                records = stream.count();
-            }
+            long records = countDataRows(filePath, 0);
             return new FileMetadata(filePath.toString(), fileSize, records);
         } catch (IOException e) {
             throw new RuntimeException("Failed to read file metadata: " + filePath, e);
+        }
+    }
+
+    /** Counts data rows (excluding the header) in a single workbook pass — no double read. */
+    private long countDataRows(Path filePath, int sheetIndex) throws IOException {
+        try (Workbook workbook = WorkbookFactory.create(filePath.toFile())) {
+            Sheet sheet = workbook.getSheetAt(sheetIndex);
+            long count = 0;
+            boolean headerFound = false;
+            for (Row row : sheet) {
+                if (!headerFound) {
+                    boolean hasContent = false;
+                    for (Cell cell : row) {
+                        Object val = extractCellValue(cell);
+                        if (val != null && !val.toString().isBlank()) {
+                            hasContent = true;
+                            break;
+                        }
+                    }
+                    if (hasContent) headerFound = true;
+                } else {
+                    count++;
+                }
+            }
+            return count;
         }
     }
 

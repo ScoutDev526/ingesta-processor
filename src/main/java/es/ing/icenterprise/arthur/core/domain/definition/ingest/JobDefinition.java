@@ -13,10 +13,12 @@ public record JobDefinition(
     FileType fileType,
     List<TaskDefinition> tasks,
     Map<String, Object> parameters,
-    int batchSize
+    int batchSize,
+    int sheetIndex
 ) {
     public JobDefinition {
         if (batchSize <= 0) batchSize = 500;
+        if (sheetIndex < 0) sheetIndex = 0;
         if (parameters == null) parameters = Map.of();
         if (tasks == null) tasks = List.of();
     }

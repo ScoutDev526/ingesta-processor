@@ -9,16 +9,23 @@ import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteProcessUseCase;
 import es.ing.icenterprise.arthur.core.ports.outbound.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 public class IngestaService implements ExecuteProcessUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(IngestaService.class);
+
+    @Value("${ingesta.parallel-jobs:1}")
+    private int parallelJobs;
 
     private final YamlScannerPort yamlScanner;
     private final JobDefinitionLoaderPort jobDefinitionLoader;
@@ -91,8 +98,21 @@ public class IngestaService implements ExecuteProcessUseCase {
                 }
             }
 
-            // 4. Process all jobs
-            jobProcessor.process(jobs);
+            // 4. Process all jobs (in parallel if ingesta.parallel-jobs > 1)
+            if (parallelJobs > 1 && jobs.size() > 1) {
+                ExecutorService pool = Executors.newFixedThreadPool(Math.min(parallelJobs, jobs.size()));
+                try {
+                    List<CompletableFuture<Void>> futures = jobs.stream()
+                            .map(job -> CompletableFuture.runAsync(
+                                    () -> jobProcessor.process(List.of(job)), pool))
+                            .toList();
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+                } finally {
+                    pool.shutdown();
+                }
+            } else {
+                jobProcessor.process(jobs);
+            }
 
         } catch (Exception e) {
             log.error("Ingestion process failed: {}", e.getMessage(), e);

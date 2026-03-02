@@ -122,6 +122,6 @@ class JobFactoryTest {
                 "test-job", "Test job description", true,
                 source, FileType.EXCEL,
                 List.of(transformTask, persistTask),
-                Map.of(), 500);
+                Map.of(), 500, 0);
     }
 }

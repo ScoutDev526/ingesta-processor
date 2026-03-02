@@ -95,7 +95,8 @@ public class DefaultJobProcessor implements JobProcessor {
                         "No reader found for file type: " + job.getFileType()));
 
         List<Action> actions = new ArrayList<>();
-        try (Stream<Map<String, Object>> stream = reader.read(Path.of(job.getFilePath()))) {
+        Map<String, Object> readerParams = Map.of("sheetIndex", job.getSheetIndex());
+        try (Stream<Map<String, Object>> stream = reader.read(Path.of(job.getFilePath()), readerParams)) {
             stream.forEach(row -> actions.add(new Action(row)));
         }
 
@@ -220,10 +221,16 @@ public class DefaultJobProcessor implements JobProcessor {
                 // Resolve mappings: auto-map Excel headers → DB columns
                 List<DatabaseMapping> mappings = resolveMappings(params, excelHeaders);
 
-                persistencePort.insertData(data, mappings, params);
-                step.getMetrics().incrementProcessed(data.size());
+                int batchSize = ((Number) params.getOrDefault("_batchSize", 500)).intValue();
+                int total = data.size();
+                for (int i = 0; i < total; i += batchSize) {
+                    List<Action> chunk = data.subList(i, Math.min(i + batchSize, total));
+                    persistencePort.insertData(chunk, mappings, params);
+                }
+                step.getMetrics().incrementProcessed(total);
                 step.addLog(LogEntry.info(step.getName(),
-                        "Inserted " + data.size() + " records (" + mappings.size() + " columns mapped)"));
+                        "Inserted " + total + " records in chunks of " + batchSize
+                        + " (" + mappings.size() + " columns mapped)"));
             }
             case SELECT -> {
                 Object result = persistencePort.check(null, params);
