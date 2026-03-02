@@ -45,7 +45,15 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
                 }
 
                 if (headers.isEmpty()) {
-                    // First row: always use as headers (null/blank cells get a positional fallback)
+                    // Skip blank rows before the header row (title rows, empty leading rows, etc.)
+                    boolean hasContent = rowData.values().stream()
+                            .anyMatch(v -> v != null && !v.toString().isBlank());
+                    if (!hasContent) {
+                        log.debug("Skipping blank row before headers");
+                        continue;
+                    }
+
+                    // First non-blank row: use as headers (null/blank cells get a positional fallback)
                     int maxCol = rowData.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1);
                     for (int i = 0; i <= maxCol; i++) {
                         Object val = rowData.get(i);
@@ -54,6 +62,7 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
                                 : "column_" + i;
                         headers.add(header);
                     }
+                    log.debug("Headers detected (row skipped, {} columns): {}", headers.size(), headers);
                     continue;
                 }
 
