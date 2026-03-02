@@ -285,17 +285,19 @@ public class DefaultJobProcessor implements JobProcessor {
 
     @SuppressWarnings("unchecked")
     private void executeLinkParent(Step step, List<Action> data, Map<String, Object> params) {
-        String idColumn          = (String) params.get("idColumn");
-        String parentPathColumn  = (String) params.get("parentPathColumn");
-        String parentObjColumn   = (String) params.get("parentObjectsColumn");
-        String parentTypeColumn  = (String) params.get("parentTypeColumn");
-        String separator         = (String) params.getOrDefault("separator", "/");
-        String checkIdColumn     = (String) params.getOrDefault("checkIdColumn", "ID");
-        String id1Column         = (String) params.getOrDefault("id1Column", "ID_1");
-        String id2Column         = (String) params.getOrDefault("id2Column", "ID_2");
-        String timestampColumn   = (String) params.getOrDefault("timestampColumn", "TIMESTAMP");
-        String schema            = (String) params.get("schema");
-        LocalDate ingestDate     = (LocalDate) params.getOrDefault("_ingestDate", LocalDate.now());
+        String idColumn           = (String) params.get("idColumn");
+        String parentPathColumn   = (String) params.get("parentPathColumn");
+        String parentObjColumn    = (String) params.get("parentObjectsColumn");
+        String parentTypeColumn   = (String) params.get("parentTypeColumn");
+        String separator          = (String) params.getOrDefault("separator", "/");
+        String checkIdColumn      = (String) params.getOrDefault("checkIdColumn", "ID");
+        String id1Column          = (String) params.getOrDefault("id1Column", "ID_1");
+        String id2Column          = (String) params.getOrDefault("id2Column", "ID_2");
+        String timestampColumn    = (String) params.getOrDefault("timestampColumn", "TIMESTAMP");
+        String schema             = (String) params.get("schema");
+        String etlLogTable        = (String) params.get("etlLogTable");
+        String currentEntityType  = (String) params.getOrDefault("currentEntityType", "Unknown");
+        LocalDate ingestDate      = (LocalDate) params.getOrDefault("_ingestDate", LocalDate.now());
 
         List<Map<String, Object>> rules = (List<Map<String, Object>>) params.get("rules");
 
@@ -312,8 +314,9 @@ public class DefaultJobProcessor implements JobProcessor {
             Map<String, Object> rule = findRule(rules, parentType);
 
             if (rule != null) {
-                String checkTable    = (String) rule.get("checkTable");
-                String relationTable = (String) rule.get("relationTable");
+                String checkTable       = (String) rule.get("checkTable");
+                String relationTable    = (String) rule.get("relationTable");
+                String parentEntityType = (String) rule.getOrDefault("parentEntityType", checkTable);
 
                 boolean exists = persistencePort.checkExists(
                         checkTable, schema, checkIdColumn, parentId, timestampColumn, ingestDate);
@@ -328,10 +331,14 @@ public class DefaultJobProcessor implements JobProcessor {
                 } else {
                     log.warn("LINK_PARENT [{}]: parent '{}' not found in '{}'. Record ID='{}'",
                             parentType, parentId, checkTable, currentId);
+                    insertEtlLog(etlLogTable, schema, parentEntityType, parentId,
+                            currentEntityType, currentId, "Unknown", "relationship not loaded", ingestDate);
                     notFound++;
                 }
             } else {
                 log.warn("LINK_PARENT: unknown parentType='{}'. Record ID='{}'", parentType, currentId);
+                insertEtlLog(etlLogTable, schema, "Unknown", parentType,
+                        currentEntityType, currentId, "Unknown", "relationship not loaded", ingestDate);
                 unknownType++;
             }
         }
@@ -339,6 +346,21 @@ public class DefaultJobProcessor implements JobProcessor {
         step.addLog(LogEntry.info(step.getName(), String.format(
                 "LINK_PARENT: %d linked, %d parent not found, %d unknown parentType",
                 linked, notFound, unknownType)));
+    }
+
+    private void insertEtlLog(String etlLogTable, String schema,
+                              String whereA, String a, String whereB,
+                              String b, String cause, String action, LocalDate date) {
+        if (etlLogTable == null) return;
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("WHERE_A", whereA);
+        row.put("A", a);
+        row.put("WHERE_B", whereB);
+        row.put("B", b);
+        row.put("CAUSE", cause);
+        row.put("ACTION", action);
+        row.put("TIMESTAMP", date);
+        persistencePort.insertRow(etlLogTable, schema, row);
     }
 
     private String buildParentId(Action action, String pathColumn, String objectsColumn, String separator) {
