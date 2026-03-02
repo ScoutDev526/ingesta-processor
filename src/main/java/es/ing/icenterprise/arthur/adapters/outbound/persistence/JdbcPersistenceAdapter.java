@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
@@ -158,6 +159,16 @@ public class JdbcPersistenceAdapter implements PersistencePort {
 
         jdbcTemplate.update(sql, args);
         log.debug("Inserted row into {}: {}", fullTable, columnValues);
+    }
+
+    @Override
+    public Set<Object> loadReferenceIds(String tableName, String schema, String idColumn,
+                                        String timestampColumn, LocalDate date) {
+        String fullTable = schema != null ? schema + "." + tableName : tableName;
+        String sql = "SELECT " + idColumn + " FROM " + fullTable + " WHERE " + timestampColumn + " = ?";
+        Timestamp ts = Timestamp.valueOf(date.atStartOfDay());
+        List<Object> ids = jdbcTemplate.queryForList(sql, Object.class, ts);
+        return new HashSet<>(ids);
     }
 
     private Object resolveConcatenated(Action action, DatabaseMapping mapping) {

@@ -6,6 +6,7 @@ import es.ing.icenterprise.arthur.core.domain.model.DatabaseMapping;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Port for inserting/checking data against the target database.
@@ -36,4 +37,11 @@ public interface PersistencePort {
      * Inserts a single row with raw column→value pairs. LocalDate values are stored as TIMESTAMP at midnight.
      */
     void insertRow(String tableName, String schema, Map<String, Object> columnValues);
+
+    /**
+     * Loads all values of idColumn from a table filtered by timestampColumn = date into a Set.
+     * Used as a cache for VALIDATE_REFERENCE steps to avoid N+1 queries.
+     */
+    Set<Object> loadReferenceIds(String tableName, String schema, String idColumn,
+                                 String timestampColumn, LocalDate date);
 }

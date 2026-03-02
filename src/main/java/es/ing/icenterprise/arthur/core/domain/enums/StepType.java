@@ -11,5 +11,6 @@ public enum StepType {
     // Persistence types
     SELECT,
     INSERT,
-    TRUNCATE
+    TRUNCATE,
+    VALIDATE_REFERENCE
 }

@@ -230,6 +230,7 @@ public class DefaultJobProcessor implements JobProcessor {
                 step.addLog(LogEntry.info(step.getName(), "Check completed"));
             }
             case LINK_PARENT -> executeLinkParent(step, data, params);
+            case VALIDATE_REFERENCE -> executeValidateReference(step, data, params);
             default -> step.addLog(LogEntry.warn(step.getName(),
                     "Unknown persistence type: " + step.getStepType()));
         }
@@ -281,6 +282,45 @@ public class DefaultJobProcessor implements JobProcessor {
         }
 
         return List.of();
+    }
+
+    private void executeValidateReference(Step step, List<Action> data, Map<String, Object> params) {
+        String fieldColumn       = (String) params.get("fieldColumn");
+        String referenceTable    = (String) params.get("referenceTable");
+        String referenceIdColumn = (String) params.getOrDefault("referenceIdColumn", "ID");
+        String timestampColumn   = (String) params.getOrDefault("timestampColumn", "TIMESTAMP");
+        String idColumn          = (String) params.get("idColumn");
+        String schema            = (String) params.get("schema");
+        String etlLogTable       = (String) params.get("etlLogTable");
+        String currentEntityType = (String) params.getOrDefault("currentEntityType", "Unknown");
+        LocalDate ingestDate     = (LocalDate) params.getOrDefault("_ingestDate", LocalDate.now());
+
+        // Load all valid reference IDs in one query (cache)
+        Set<Object> validIds = persistencePort.loadReferenceIds(
+                referenceTable, schema, referenceIdColumn, timestampColumn, ingestDate);
+        log.debug("VALIDATE_REFERENCE: loaded {} valid IDs from {}", validIds.size(), referenceTable);
+
+        int cleared = 0;
+        for (Action action : data) {
+            Object fieldValue = action.get(fieldColumn);
+            if (fieldValue == null || fieldValue.toString().isBlank()) continue;
+
+            if (!validIds.contains(fieldValue)) {
+                String currentId = idColumn != null ? String.valueOf(action.get(idColumn)) : "?";
+                log.warn("VALIDATE_REFERENCE [{}]: value '{}' not found in '{}'. Record ID='{}'",
+                        fieldColumn, fieldValue, referenceTable, currentId);
+                insertEtlLog(etlLogTable, schema,
+                        "Unknown", fieldColumn, fieldValue.toString(),
+                        currentEntityType, currentId, "loading data with empty value", ingestDate);
+                action.data().put(fieldColumn, "");
+                cleared++;
+            }
+        }
+
+        step.getMetrics().incrementProcessed(data.size());
+        step.addLog(LogEntry.info(step.getName(), String.format(
+                "VALIDATE_REFERENCE '%s' → '%s.%s': %d invalid values cleared",
+                fieldColumn, referenceTable, referenceIdColumn, cleared)));
     }
 
     @SuppressWarnings("unchecked")
