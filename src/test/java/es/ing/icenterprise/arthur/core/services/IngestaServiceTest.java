@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -52,6 +53,8 @@ class IngestaServiceTest {
                 notificationPort,
                 cleanupPort
         );
+        // Inject @Value field that Spring would normally inject
+        ReflectionTestUtils.setField(service, "workingDirectory", "/tmp/ingesta-test");
     }
 
     @Test
@@ -71,8 +74,8 @@ class IngestaServiceTest {
         when(fileDownloader.download(any())).thenReturn(tempData);
         when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(expectedReport);
 
-        // When
-        ProcessReport report = service.execute(ExecuteCommand.fromManual());
+        // When — use forceRedownload=true to bypass cache and exercise the download path
+        ProcessReport report = service.execute(ExecuteCommand.fromManual(List.of(), true));
 
         // Then
         assertThat(report).isNotNull();
@@ -136,8 +139,8 @@ class IngestaServiceTest {
         when(fileDownloader.download(any())).thenReturn(tempData);
         when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(report);
 
-        // Execute with filter for only job-alpha
-        service.execute(ExecuteCommand.fromManual(List.of("job-alpha")));
+        // Execute with filter for only job-alpha — forceRedownload=true to bypass cache
+        service.execute(ExecuteCommand.fromManual(List.of("job-alpha"), true));
 
         // Should only download file for one job
         verify(fileDownloader, times(1)).download(any());
@@ -162,8 +165,8 @@ class IngestaServiceTest {
         when(fileDownloader.download(any())).thenThrow(new RuntimeException("Download failed"));
         when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(report);
 
-        // Should not throw
-        ProcessReport result = service.execute(ExecuteCommand.fromManual());
+        // Should not throw — use forceRedownload=true to bypass cache and trigger download
+        ProcessReport result = service.execute(ExecuteCommand.fromManual(List.of(), true));
         assertThat(result).isNotNull();
     }
 
@@ -181,9 +184,66 @@ class IngestaServiceTest {
         when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(createSuccessReport());
         doThrow(new RuntimeException("Notification failed")).when(notificationPort).notify(any(), any());
 
-        // Should not throw
-        ProcessReport result = service.execute(ExecuteCommand.fromManual());
+        // Should not throw — use forceRedownload=true to bypass cache and trigger download
+        ProcessReport result = service.execute(ExecuteCommand.fromManual(List.of(), true));
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should skip download when cached file exists and forceRedownload is false")
+    void shouldSkipDownloadWhenCachedFileExists() throws IOException {
+        // Given: a YAML definition pointing to /data/test.xlsx
+        Path tempYaml = Files.createTempFile("job-def", ".yml");
+        tempYaml.toFile().deleteOnExit();
+
+        // Create the "cached" file at the expected location: workingDirectory/test.xlsx
+        Path workDir = Path.of("/tmp/ingesta-test");
+        Files.createDirectories(workDir);
+        Path cachedFile = workDir.resolve("test.xlsx");
+        // Use write with TRUNCATE_EXISTING to handle file already existing from a prior test run
+        Files.write(cachedFile, new byte[0], java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+        cachedFile.toFile().deleteOnExit();
+
+        JobDefinition definition = createSampleDefinition();
+
+        when(yamlScanner.scanJobDefinitions()).thenReturn(List.of(tempYaml));
+        when(jobDefinitionLoader.load(tempYaml)).thenReturn(definition);
+        when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(createSuccessReport());
+
+        // When: executed without forceRedownload
+        service.execute(ExecuteCommand.fromManual(List.of("test-job"), false));
+
+        // Then: downloader is never called because the cached file was used
+        verify(fileDownloader, never()).download(any());
+    }
+
+    @Test
+    @DisplayName("Should re-download when forceRedownload is true even if cached file exists")
+    void shouldRedownloadWhenForceRedownloadIsTrue() throws IOException {
+        // Given: cached file already exists
+        Path tempYaml = Files.createTempFile("job-def", ".yml");
+        Path tempData = Files.createTempFile("data", ".xlsx");
+        tempYaml.toFile().deleteOnExit();
+        tempData.toFile().deleteOnExit();
+
+        Path workDir = Path.of("/tmp/ingesta-test");
+        Files.createDirectories(workDir);
+        Path cachedFile = workDir.resolve("test.xlsx");
+        Files.write(cachedFile, new byte[0], java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+        cachedFile.toFile().deleteOnExit();
+
+        when(yamlScanner.scanJobDefinitions()).thenReturn(List.of(tempYaml));
+        when(jobDefinitionLoader.load(tempYaml)).thenReturn(createSampleDefinition());
+        when(fileDownloader.download(any())).thenReturn(tempData);
+        when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(createSuccessReport());
+
+        // When: executed with forceRedownload=true
+        service.execute(ExecuteCommand.fromManual(List.of("test-job"), true));
+
+        // Then: downloader IS called despite the cached file
+        verify(fileDownloader).download(any());
     }
 
     // === Helpers ===

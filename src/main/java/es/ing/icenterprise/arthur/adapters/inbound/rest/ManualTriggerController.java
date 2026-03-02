@@ -21,11 +21,11 @@ public class ManualTriggerController {
 
     @PostMapping("/execute")
     public ResponseEntity<Map<String, Object>> execute(
-            @RequestParam(required = false) List<String> jobs) {
+            @RequestParam(required = false) List<String> jobs,
+            @RequestParam(required = false, defaultValue = "false") boolean redownload) {
 
-        ExecuteCommand command = (jobs != null && !jobs.isEmpty())
-                ? ExecuteCommand.fromManual(jobs)
-                : ExecuteCommand.fromManual();
+        ExecuteCommand command = ExecuteCommand.fromManual(
+                (jobs != null && !jobs.isEmpty()) ? jobs : List.of(), redownload);
 
         ProcessReport report = executeProcessUseCase.execute(command);
 

@@ -1,0 +1,58 @@
+name: sharepoint-zip-import
+description: Descarga diaria de ZIP desde SharePoint e ingesta del Excel contenido
+enabled: false  # Cambiar a true cuando se configuren las credenciales y el driveId/itemId
+fileType: EXCEL
+batchSize: 1000
+
+source:
+  type: SHAREPOINT
+  location:
+    # path es informativo — la descarga real usa las properties de abajo
+    path: /sites/MiSitio/Shared Documents/ingesta-diaria.zip
+    properties:
+      # driveId: ID del drive de SharePoint (obtenible via Graph Explorer o admin)
+      driveId: "REEMPLAZAR_CON_DRIVE_ID"
+      # itemId (preferido, estable) o filePath como alternativa
+      itemId: "REEMPLAZAR_CON_ITEM_ID"
+      # filePath: "ingesta-diaria.zip"  # alternativa si no se conoce el itemId
+      # Nombre del Excel a extraer del ZIP
+      fileWithinZip: "datos-diarios.xlsx"
+
+parameters:
+  tableName: DATOS_DIARIOS
+  schema: INGESTA
+
+tasks:
+  - name: transformaciones
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-espacios
+        order: 1
+        type: TRIM
+      - name: mayusculas
+        order: 2
+        type: UPPERCASE
+
+  - name: persistencia
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      - name: truncar-tabla
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: DATOS_DIARIOS
+
+      - name: insertar-registros
+        order: 2
+        type: INSERT
+        parameters:
+          tableName: DATOS_DIARIOS
+          schema: INGESTA
+          autoMap: true
+          mappings:
+            - dbColumn: "FECHA_INGESTA"
+              autoGenerate: "TIMESTAMP"

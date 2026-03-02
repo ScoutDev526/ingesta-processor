@@ -35,4 +35,27 @@ class ExecuteCommandTest {
         assertThat(cmd.shouldRunAll()).isFalse();
         assertThat(cmd.jobFilter()).containsExactly("job-a", "job-b");
     }
+
+    @Test
+    @DisplayName("fromScheduler has forceRedownload=false")
+    void fromSchedulerNoRedownload() {
+        ExecuteCommand cmd = ExecuteCommand.fromScheduler();
+        assertThat(cmd.forceRedownload()).isFalse();
+    }
+
+    @Test
+    @DisplayName("fromManual with forceRedownload=true sets flag correctly")
+    void fromManualWithForceRedownload() {
+        ExecuteCommand cmd = ExecuteCommand.fromManual(List.of("job-a"), true);
+        assertThat(cmd.manuallyTriggered()).isTrue();
+        assertThat(cmd.forceRedownload()).isTrue();
+        assertThat(cmd.jobFilter()).containsExactly("job-a");
+    }
+
+    @Test
+    @DisplayName("fromManual without redownload flag defaults to false")
+    void fromManualDefaultNoRedownload() {
+        ExecuteCommand cmd = ExecuteCommand.fromManual(List.of("job-a"));
+        assertThat(cmd.forceRedownload()).isFalse();
+    }
 }

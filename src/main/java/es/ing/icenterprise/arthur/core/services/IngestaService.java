@@ -1,5 +1,6 @@
 package es.ing.icenterprise.arthur.core.services;
 
+import es.ing.icenterprise.arthur.core.domain.definition.ingest.FileSourceType;
 import es.ing.icenterprise.arthur.core.domain.definition.ingest.JobDefinition;
 import es.ing.icenterprise.arthur.core.domain.factory.ingest.JobFactory;
 import es.ing.icenterprise.arthur.core.domain.model.*;
@@ -9,11 +10,14 @@ import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteProcessUseCase;
 import es.ing.icenterprise.arthur.core.ports.outbound.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class IngestaService implements ExecuteProcessUseCase {
@@ -28,6 +32,9 @@ public class IngestaService implements ExecuteProcessUseCase {
     private final MetricsCollector metricsCollector;
     private final NotificationPort notificationPort;
     private final CleanupWorkingDirectoryPort cleanupPort;
+
+    @Value("${ingesta.working-directory:/tmp/ingesta}")
+    private String workingDirectory;
 
     public IngestaService(YamlScannerPort yamlScanner,
                           JobDefinitionLoaderPort jobDefinitionLoader,
@@ -49,8 +56,8 @@ public class IngestaService implements ExecuteProcessUseCase {
 
     @Override
     public ProcessReport execute(ExecuteCommand command) {
-        log.info("Starting ingestion process. Manual: {}, Filter: {}",
-                command.manuallyTriggered(), command.jobFilter());
+        log.info("Starting ingestion process. Manual: {}, Filter: {}, ForceRedownload: {}",
+                command.manuallyTriggered(), command.jobFilter(), command.forceRedownload());
 
         List<Job> jobs = new ArrayList<>();
 
@@ -68,10 +75,10 @@ public class IngestaService implements ExecuteProcessUseCase {
 
             log.info("Loaded {} enabled job definition(s)", definitions.size());
 
-            // 3. For each definition: download file → create job
+            // 3. For each definition: download file (with cache check) → create job
             for (JobDefinition definition : definitions) {
                 try {
-                    Path dataFilePath = downloadFile(definition);
+                    Path dataFilePath = downloadFile(definition, command);
 
                     if (jobFactory.canLoadFile(dataFilePath)) {
                         Job job = jobFactory.createJob(definition, dataFilePath);
@@ -125,13 +132,41 @@ public class IngestaService implements ExecuteProcessUseCase {
         return report;
     }
 
-    private Path downloadFile(JobDefinition definition) {
+    private Path downloadFile(JobDefinition definition, ExecuteCommand command) {
         FileDownloaderPort downloader = fileDownloaders.stream()
                 .filter(d -> d.supports(definition.source().type()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "No downloader found for source type: " + definition.source().type()));
 
+        if (!command.forceRedownload()) {
+            Path cached = resolveCachedPath(definition);
+            if (cached != null && Files.exists(cached)) {
+                log.info("Skipping download for '{}', using cached file: {}",
+                        definition.name(), cached);
+                return cached;
+            }
+        }
+
         return downloader.download(definition.source());
+    }
+
+    /**
+     * Derives the expected cached file path based on source type and location.
+     * For SHAREPOINT: looks in workingDirectory/zip-extract/{fileWithinZip}.
+     * For RESOURCES: derives filename from the source path.
+     */
+    private Path resolveCachedPath(JobDefinition definition) {
+        if (definition.source().type() == FileSourceType.SHAREPOINT) {
+            Map<String, String> props = definition.source().location().properties();
+            String fileWithinZip = props != null ? props.get("fileWithinZip") : null;
+            if (fileWithinZip == null || fileWithinZip.isBlank()) return null;
+            return Path.of(workingDirectory).resolve("zip-extract").resolve(fileWithinZip);
+        }
+
+        // RESOURCES: derive filename from the configured path
+        String locationPath = definition.source().location().path();
+        if (locationPath == null || locationPath.isBlank()) return null;
+        return Path.of(workingDirectory).resolve(Path.of(locationPath).getFileName());
     }
 }

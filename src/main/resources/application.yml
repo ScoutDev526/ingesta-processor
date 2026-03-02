@@ -20,9 +20,16 @@ ingesta:
   working-directory: /tmp/ingesta
   scheduler:
     enabled: false
-    cron: "0 0 2 * * ?"
+    cron: "0 0 11 * * ?"
+    infopacks:
+      enabled: false
+      cron: "0 0 9 1-3 * ?"
   notification:
     enabled: true
+  sharepoint:
+    tenant-id: ${SHAREPOINT_TENANT_ID:}
+    client-id: ${SHAREPOINT_CLIENT_ID:}
+    client-secret: ${SHAREPOINT_CLIENT_SECRET:}
 
 logging:
   level:
