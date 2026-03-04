@@ -1,0 +1,104 @@
+# =============================================================================
+# POLICY IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: policy-import-XX (código del país)
+#   - source.location.path: /data/Policy-XX.xlsx
+# =============================================================================
+name: policy-import
+description: Import policy data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Policy-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en POLICY antes de reinsertar
+      - name: truncate-policy
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: POLICY
+          timestampColumn: TIMESTAMP
+
+      # Validar Domain_Owner contra tabla HR; si no existe → ETL_LOG + vaciar campo
+      - name: validate-domain-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Domain_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Policy
+
+      # Insertar en tabla POLICY con auto-mapping + ID compuesto + TIMESTAMP
+      - name: insert-policy
+        order: 3
+        type: INSERT
+        parameters:
+          tableName: POLICY
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+
+      # Relación condicional: si Parent_Object_Types == "Mandate"
+      # → verificar en REGULATION → insertar en POLICY_REGULATION
+      # Si padre no existe o tipo desconocido → ETL_LOG
+      - name: link-parent-regulation
+        order: 4
+        type: LINK_PARENT
+        parameters:
+          idColumn: ID
+          parentPathColumn: Parent_Path
+          parentObjectsColumn: Parent_Objects
+          parentTypeColumn: Parent_Object_Types
+          separator: "/"
+          etlLogTable: ETL_LOG
+          currentEntityType: Policy
+          rules:
+            - parentType: Mandate
+              checkTable: REGULATION
+              relationTable: POLICY_REGULATION
+              parentEntityType: Regulation
