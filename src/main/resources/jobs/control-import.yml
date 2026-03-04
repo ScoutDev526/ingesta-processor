@@ -1,0 +1,130 @@
+# =============================================================================
+# CONTROL IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: control-import-XX (código del país)
+#   - source.location.path: /data/Control-XX.xlsx
+# =============================================================================
+name: control-import
+description: Import control data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Control-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en CONTROL antes de reinsertar
+      - name: truncate-control
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: CONTROL
+          timestampColumn: TIMESTAMP
+
+      # Validar Control_Owner contra tabla HR
+      - name: validate-control-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Control_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Control
+
+      # Validar Delegate_Control_Owner contra tabla HR
+      - name: validate-delegate-control-owner
+        order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Delegate_Control_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Control
+
+      # Insertar en tabla CONTROL
+      - name: insert-control
+        order: 4
+        type: INSERT
+        parameters:
+          tableName: CONTROL
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Control_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Control_Description"
+              dbColumn: "DESCRIPTION"
+
+      # Relaciones condicionales según Parent_Object_Types:
+      #   SOXControlObjective → check CONTROLOBJECTIVE → insert CONTROL_CONTROLOBJECTIVE
+      #   SOXRisk             → check RISK             → insert CONTROL_RISK
+      #   Requirement         → check MINIMUMSTANDARD   → insert CONTROL_MINIMUMSTANDARD
+      - name: link-parent
+        order: 5
+        type: LINK_PARENT
+        parameters:
+          idColumn: ID
+          parentPathColumn: Parent_Path
+          parentObjectsColumn: Parent_Objects
+          parentTypeColumn: Parent_Object_Types
+          separator: "/"
+          etlLogTable: ETL_LOG
+          currentEntityType: Control
+          rules:
+            - parentType: SOXControlObjective
+              checkTable: CONTROLOBJECTIVE
+              relationTable: CONTROL_CONTROLOBJECTIVE
+              parentEntityType: Control objective
+            - parentType: SOXRisk
+              checkTable: RISK
+              relationTable: CONTROL_RISK
+              parentEntityType: Risk
+            - parentType: Requirement
+              checkTable: MINIMUMSTANDARD
+              relationTable: CONTROL_MINIMUMSTANDARD
+              parentEntityType: Minimum standard
