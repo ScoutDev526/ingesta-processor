@@ -1,12 +1,12 @@
 # =============================================================================
-# POLICY IMPORT - Plantilla
+# MINIMUM STANDARD IMPORT - Plantilla
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
-#   - name: policy-import-XX (código del país)
-#   - source.location.path: /data/Policy-XX.xlsx
+#   - name: minimum-standard-import-XX (código del país)
+#   - source.location.path: /data/Minimum Standard-XX.xlsx
 # =============================================================================
-name: policy-import
-description: Import policy data from Excel file (template - duplicate per country)
+name: minimum-standard-import
+description: Import minimum standard data from Excel file (template - duplicate per country)
 enabled: true
 fileType: EXCEL
 batchSize: 500
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Policy-XX.xlsx
+    path: /data/Minimum Standard-XX.xlsx
 
 parameters:
   schema: INGESTA
@@ -48,15 +48,15 @@ tasks:
     type: PERSISTENCE
     stopOnFailure: true
     subtasks:
-      # Borrar datos del día actual en POLICY antes de reinsertar
-      - name: truncate-policy
+      # Borrar datos del día actual en MINIMUMSTANDARD antes de reinsertar
+      - name: truncate-minimumstandard
         order: 1
         type: TRUNCATE
         parameters:
-          tableName: POLICY
+          tableName: MINIMUMSTANDARD
           timestampColumn: TIMESTAMP
 
-      # Validar Domain_Owner contra tabla HR; si no existe → ETL_LOG + vaciar campo
+      # Validar Domain_Owner contra tabla HR
       - name: validate-domain-owner
         order: 2
         type: VALIDATE_REFERENCE
@@ -67,14 +67,27 @@ tasks:
           timestampColumn: TIMESTAMP
           idColumn: ID
           etlLogTable: ETL_LOG
-          currentEntityType: Policy
+          currentEntityType: Minimum standard
 
-      # Insertar en tabla POLICY con auto-mapping + ID compuesto + TIMESTAMP
-      - name: insert-policy
+      # Validar SPOC contra tabla HR
+      - name: validate-spoc
         order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: SPOC
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Minimum standard
+
+      # Insertar en tabla MINIMUMSTANDARD
+      - name: insert-minimumstandard
+        order: 4
         type: INSERT
         parameters:
-          tableName: POLICY
+          tableName: MINIMUMSTANDARD
           autoMap: true
           mappings:
             - dbColumn: "ID"
@@ -82,16 +95,15 @@ tasks:
               separator: "/"
             - dbColumn: "TIMESTAMP"
               autoGenerate: "TIMESTAMP"
-            - excelColumn: "Policy_Name"
+            - excelColumn: "Minimum_Standard_Name"
               dbColumn: "NAME"
-            - excelColumn: "Policy_Description"
+            - excelColumn: "Minimum_Standard_Description"
               dbColumn: "DESCRIPTION"
 
-      # Relación condicional: si Parent_Object_Types == "Mandate"
-      # → verificar en REGULATION → insertar en POLICY_REGULATION
-      # Si padre no existe o tipo desconocido → ETL_LOG
-      - name: link-parent-regulation
-        order: 4
+      # Relación condicional: si Parent_Object_Types == "Submandate"
+      # → verificar en POLICY → insertar en MINIMUMSTANDARD_POLICY
+      - name: link-parent-policy
+        order: 5
         type: LINK_PARENT
         parameters:
           idColumn: ID
@@ -100,9 +112,9 @@ tasks:
           parentTypeColumn: Parent_Object_Types
           separator: "/"
           etlLogTable: ETL_LOG
-          currentEntityType: Policy
+          currentEntityType: Minimum standard
           rules:
-            - parentType: Mandate
-              checkTable: REGULATION
-              relationTable: POLICY_REGULATION
-              parentEntityType: Regulation
+            - parentType: Submandate
+              checkTable: POLICY
+              relationTable: MINIMUMSTANDARD_POLICY
+              parentEntityType: Policy
