@@ -1,0 +1,114 @@
+# =============================================================================
+# PROCESS IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: process-import-XX (código del país)
+#   - source.location.path: /data/Process-XX.xlsx
+# =============================================================================
+name: process-import
+description: Import process data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Process-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en PROCESS antes de reinsertar
+      - name: truncate-process
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: PROCESS
+          timestampColumn: TIMESTAMP
+
+      # Validar Domain_Owner contra tabla HR
+      - name: validate-domain-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Domain_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Process
+
+      # Validar Process_Owner contra tabla HR
+      - name: validate-process-owner
+        order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Process_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Process
+
+      # Validar Delegate_Process_Owner contra tabla HR
+      - name: validate-delegate-process-owner
+        order: 4
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Delegate_Process_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Process
+
+      # Insertar en tabla PROCESS
+      - name: insert-process
+        order: 5
+        type: INSERT
+        parameters:
+          tableName: PROCESS
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Process_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Process_Description"
+              dbColumn: "DESCRIPTION"
