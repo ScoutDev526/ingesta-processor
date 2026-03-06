@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: controlobjective-import-XX (código del país)
-#   - source.location.path: /data/Control Objective-XX.xlsx
+#   - source.location.path: Control Objective-XX
 # =============================================================================
 name: controlobjective-import
 description: Import control objective data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Control Objective-XX.xlsx
+    path: Control Objective-XX
 
 parameters:
   schema: INGESTA

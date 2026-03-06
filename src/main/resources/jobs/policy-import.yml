@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: policy-import-XX (código del país)
-#   - source.location.path: /data/Policy-XX.xlsx
+#   - source.location.path: Policy-XX
 # =============================================================================
 name: policy-import
 description: Import policy data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Policy-XX.xlsx
+    path: Policy-XX
 
 parameters:
   schema: INGESTA

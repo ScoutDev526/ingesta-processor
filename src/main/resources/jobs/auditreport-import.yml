@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: auditreport-import-XX (código del país)
-#   - source.location.path: /data/Audit Report-XX.xlsx
+#   - source.location.path: Audit Report-XX
 # =============================================================================
 name: auditreport-import
 description: Import audit report data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Audit Report-XX.xlsx
+    path: Audit Report-XX
 
 parameters:
   schema: INGESTA

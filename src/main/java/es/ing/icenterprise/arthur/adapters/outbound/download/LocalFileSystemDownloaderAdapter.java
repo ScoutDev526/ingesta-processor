@@ -9,10 +9,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.*;
+import java.util.Comparator;
+import java.util.stream.Stream;
 
 @Component
 public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
@@ -21,6 +22,9 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
 
     @Value("${ingesta.working-directory:/tmp/ingesta}")
     private String workingDirectory;
+
+    @Value("${ingesta.data-directory:}")
+    private String dataDirectory;
 
     @Override
     public Path download(FileSourceDefinition source) {
@@ -31,7 +35,13 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
             Path workDir = Path.of(workingDirectory);
             Files.createDirectories(workDir);
 
-            Path sourcePath = resolveSource(resourcePath);
+            Path sourcePath;
+            if (!dataDirectory.isBlank()) {
+                sourcePath = resolveFromDataDirectory(resourcePath);
+            } else {
+                sourcePath = resolveSource(resourcePath);
+            }
+
             Path targetPath = workDir.resolve(sourcePath.getFileName());
             Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
 
@@ -40,6 +50,43 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
         } catch (IOException e) {
             throw new RuntimeException("Failed to copy file to working directory", e);
         }
+    }
+
+    /**
+     * Resolves a file from the configured data-directory by matching the suffix.
+     * Given suffix "Actions-ES", finds files like "2026-03-06-Full Dump Actions-ES.xlsx".
+     * If multiple files match, picks the one with the most recent filename (lexicographic).
+     */
+    private Path resolveFromDataDirectory(String suffix) {
+        Path dataDir = Path.of(dataDirectory);
+        if (!Files.isDirectory(dataDir)) {
+            throw new RuntimeException("Data directory does not exist: " + dataDirectory);
+        }
+
+        String suffixLower = suffix.toLowerCase();
+
+        try (Stream<Path> files = Files.list(dataDir)) {
+            Path match = files
+                    .filter(Files::isRegularFile)
+                    .filter(p -> {
+                        String name = p.getFileName().toString().toLowerCase();
+                        // Strip extension, then check if name ends with the suffix
+                        int dotIndex = name.lastIndexOf('.');
+                        String nameWithoutExt = dotIndex > 0 ? name.substring(0, dotIndex) : name;
+                        return nameWithoutExt.endsWith(suffixLower);
+                    })
+                    .max(Comparator.comparing(p -> p.getFileName().toString()))
+                    .orElse(null);
+
+            if (match != null) {
+                log.info("Resolved '{}' from data directory as: {}", suffix, match);
+                return match;
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to scan data directory: " + dataDirectory, e);
+        }
+
+        throw new RuntimeException("No file matching suffix '" + suffix + "' found in data directory: " + dataDirectory);
     }
 
     private Path resolveSource(String resourcePath) {

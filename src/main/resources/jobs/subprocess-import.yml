@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: subprocess-import-XX (código del país)
-#   - source.location.path: /data/Subprocess-XX.xlsx
+#   - source.location.path: Subprocess-XX
 # =============================================================================
 name: subprocess-import
 description: Import subprocess data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Subprocess-XX.xlsx
+    path: Subprocess-XX
 
 parameters:
   schema: INGESTA

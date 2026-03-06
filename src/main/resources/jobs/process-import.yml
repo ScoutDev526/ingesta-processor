@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: process-import-XX (código del país)
-#   - source.location.path: /data/Process-XX.xlsx
+#   - source.location.path: Process-XX
 # =============================================================================
 name: process-import
 description: Import process data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Process-XX.xlsx
+    path: Process-XX
 
 parameters:
   schema: INGESTA

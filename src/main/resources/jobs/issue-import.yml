@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: issue-import-XX (código del país)
-#   - source.location.path: /data/Issues-XX.xlsx
+#   - source.location.path: Issues-XX
 # =============================================================================
 name: issue-import
 description: Import issue data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Issues-XX.xlsx
+    path: Issues-XX
 
 parameters:
   schema: INGESTA

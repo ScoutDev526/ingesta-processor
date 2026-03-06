@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: event-import-XX (código del país)
-#   - source.location.path: /data/Events-XX.xlsx
+#   - source.location.path: Events-XX
 # =============================================================================
 name: event-import
 description: Import event data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Events-XX.xlsx
+    path: Events-XX
 
 parameters:
   schema: INGESTA

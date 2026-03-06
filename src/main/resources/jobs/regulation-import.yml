@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: regulation-import-XX (código del país)
-#   - source.location.path: /data/Regulation-XX.xlsx
+#   - source.location.path: Regulation-XX
 # =============================================================================
 name: regulation-import
 description: Import regulation data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Regulation-XX.xlsx
+    path: Regulation-XX
 
 parameters:
   schema: INGESTA

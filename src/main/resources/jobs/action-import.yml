@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: action-import-XX (código del país)
-#   - source.location.path: /data/Action-XX.xlsx
+#   - source.location.path: Action-XX
 # =============================================================================
 name: action-import
 description: Import action data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Action-XX.xlsx
+    path: Action-XX
 
 parameters:
   schema: INGESTA

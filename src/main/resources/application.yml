@@ -17,6 +17,7 @@ spring:
 ingesta:
   jobs:
     path: classpath:jobs
+  data-directory: ""
   working-directory: /tmp/ingesta
   parallel-jobs: 1
   scheduler:

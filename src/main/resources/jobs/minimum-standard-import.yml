@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: minimum-standard-import-XX (código del país)
-#   - source.location.path: /data/Minimum Standard-XX.xlsx
+#   - source.location.path: Minimum Standard-XX
 # =============================================================================
 name: minimum-standard-import
 description: Import minimum standard data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Minimum Standard-XX.xlsx
+    path: Minimum Standard-XX
 
 parameters:
   schema: INGESTA

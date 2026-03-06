@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: product-import-XX (código del país)
-#   - source.location.path: /data/Product-XX.xlsx
+#   - source.location.path: Product-XX
 # =============================================================================
 name: product-import
 description: Import product data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Product-XX.xlsx
+    path: Product-XX
 
 parameters:
   schema: INGESTA

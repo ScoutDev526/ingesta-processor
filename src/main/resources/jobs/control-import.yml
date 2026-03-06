@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: control-import-XX (código del país)
-#   - source.location.path: /data/Control-XX.xlsx
+#   - source.location.path: Control-XX
 # =============================================================================
 name: control-import
 description: Import control data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Control-XX.xlsx
+    path: Control-XX
 
 parameters:
   schema: INGESTA

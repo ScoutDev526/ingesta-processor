@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: testresult-import-XX (código del país)
-#   - source.location.path: /data/Test Result-XX.xlsx
+#   - source.location.path: Test Result-XX
 # =============================================================================
 name: testresult-import
 description: Import test result data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Test Result-XX.xlsx
+    path: Test Result-XX
 
 parameters:
   schema: INGESTA

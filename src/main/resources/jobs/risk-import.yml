@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: risk-import-XX (código del país)
-#   - source.location.path: /data/Risk-XX.xlsx
+#   - source.location.path: Risk-XX
 # =============================================================================
 name: risk-import
 description: Import risk data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Risk-XX.xlsx
+    path: Risk-XX
 
 parameters:
   schema: INGESTA

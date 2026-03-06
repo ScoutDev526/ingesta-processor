@@ -3,7 +3,7 @@
 # =============================================================================
 # Duplicar este fichero por cada país, cambiando:
 #   - name: business-entity-import-XX (código del país)
-#   - source.location.path: /data/Business Entity-XX.xlsx
+#   - source.location.path: Business Entity-XX
 # =============================================================================
 name: business-entity-import
 description: Import business entity data from Excel file (template - duplicate per country)
@@ -14,7 +14,7 @@ batchSize: 500
 source:
   type: RESOURCES
   location:
-    path: /data/Business Entity-XX.xlsx
+    path: Business Entity-XX
 
 parameters:
   schema: INGESTA
