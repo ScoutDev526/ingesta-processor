@@ -1,0 +1,162 @@
+# =============================================================================
+# BUSINESS ENTITY IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: business-entity-import-XX (código del país)
+#   - source.location.path: /data/Business Entity-XX.xlsx
+# =============================================================================
+name: business-entity-import
+description: Import business entity data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Business Entity-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Full_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en BUSINESSENTITY antes de reinsertar
+      - name: truncate-businessentity
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: BUSINESSENTITY
+          timestampColumn: TIMESTAMP
+
+      # Validar Business_Owner contra tabla HR
+      - name: validate-business-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Business_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Business Entity
+
+      # Validar Business_Line_ORM_Head contra tabla HR
+      - name: validate-business-line-orm-head
+        order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Business_Line_ORM_Head
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Business Entity
+
+      # Validar Delegated_Business_Line_ORM_Head contra tabla HR
+      - name: validate-delegated-business-line-orm-head
+        order: 4
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Delegated_Business_Line_ORM_Head
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Business Entity
+
+      # Validar CEO contra tabla HR
+      - name: validate-ceo
+        order: 5
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: CEO
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Business Entity
+
+      # Validar CFO contra tabla HR
+      - name: validate-cfo
+        order: 6
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: CFO
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Business Entity
+
+      # Validar SOX_Mandated_Editor contra tabla HR
+      - name: validate-sox-mandated-editor
+        order: 7
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: SOX_Mandated_Editor
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Business Entity
+
+      # Validar Report_Receiver contra tabla HR
+      - name: validate-report-receiver
+        order: 8
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Report_Receiver
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Business Entity
+
+      # Insertar en tabla BUSINESSENTITY
+      - name: insert-businessentity
+        order: 9
+        type: INSERT
+        parameters:
+          tableName: BUSINESSENTITY
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Full_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
