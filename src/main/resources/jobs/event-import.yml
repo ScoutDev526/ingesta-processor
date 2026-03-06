@@ -1,0 +1,161 @@
+# =============================================================================
+# EVENT IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: event-import-XX (código del país)
+#   - source.location.path: /data/Events-XX.xlsx
+# =============================================================================
+name: event-import
+description: Import event data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Events-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en EVENTS antes de reinsertar
+      - name: truncate-events
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: EVENTS
+          timestampColumn: TIMESTAMP
+
+      # Validar Event_Owner contra tabla HR
+      - name: validate-event-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Event_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Event
+
+      # Validar Finance_Officer contra tabla HR
+      - name: validate-finance-officer
+        order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Finance_Officer
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Event
+
+      # Validar Local_Data_Protection_Officer contra tabla HR
+      - name: validate-local-data-protection-officer
+        order: 4
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Local_Data_Protection_Officer
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Event
+
+      # Validar Legal_Contact contra tabla HR
+      - name: validate-legal-contact
+        order: 5
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Legal_Contact
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Event
+
+      # Validar Insurable_Risk_Contact contra tabla HR
+      - name: validate-insurable-risk-contact
+        order: 6
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Insurable_Risk_Contact
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Event
+
+      # Insertar en tabla EVENTS
+      - name: insert-events
+        order: 7
+        type: INSERT
+        parameters:
+          tableName: EVENTS
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Event_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Event_Description"
+              dbColumn: "DESCRIPTION"
+
+      # Relación condicional: si Parent_Object_Types == "SOXRisk"
+      # → verificar en RISK → insertar en EVENTS_RISK
+      - name: link-parent-risk
+        order: 8
+        type: LINK_PARENT
+        parameters:
+          idColumn: ID
+          parentPathColumn: Parent_Path
+          parentObjectsColumn: Parent_Objects
+          parentTypeColumn: Parent_Object_Types
+          separator: "/"
+          etlLogTable: ETL_LOG
+          currentEntityType: Event
+          rules:
+            - parentType: SOXRisk
+              checkTable: RISK
+              relationTable: EVENTS_RISK
+              parentEntityType: Risk
+              extraColumns:
+                SIMILARITY: 1

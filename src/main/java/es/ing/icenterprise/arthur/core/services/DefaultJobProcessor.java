@@ -373,6 +373,11 @@ public class DefaultJobProcessor implements JobProcessor {
                     row.put(id1Column, currentId);
                     row.put(id2Column, parentId);
                     row.put(timestampColumn, ingestDate);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> extraColumns = (Map<String, Object>) rule.get("extraColumns");
+                    if (extraColumns != null) {
+                        row.putAll(extraColumns);
+                    }
                     persistencePort.insertRow(relationTable, schema, row);
                     linked++;
                 } else {
