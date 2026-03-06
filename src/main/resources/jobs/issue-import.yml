@@ -1,0 +1,154 @@
+# =============================================================================
+# ISSUE IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: issue-import-XX (código del país)
+#   - source.location.path: /data/Issues-XX.xlsx
+# =============================================================================
+name: issue-import
+description: Import issue data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Issues-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en ISSUES antes de reinsertar
+      - name: truncate-issues
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: ISSUES
+          timestampColumn: TIMESTAMP
+
+      # Validar Issue_Owner contra tabla HR
+      - name: validate-issue-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Issue_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Issue
+
+      # Validar Delegate_Issue_Owner contra tabla HR
+      - name: validate-delegate-issue-owner
+        order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Delegate_Issue_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Issue
+
+      # Validar User_defined_Field_2 contra tabla HR
+      - name: validate-user-defined-field-2
+        order: 4
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: User_defined_Field_2
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Issue
+
+      # Insertar en tabla ISSUES
+      - name: insert-issues
+        order: 5
+        type: INSERT
+        parameters:
+          tableName: ISSUES
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Issue_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Issue_Description"
+              dbColumn: "DESCRIPTION"
+
+      # Relaciones condicionales según Parent_Object_Types:
+      #   SOXRisk    → check RISK        → insert ISSUES_RISK (SIMILARITY: 1)
+      #   SOXControl → check CONTROL     → insert ISSUES_CONTROL (SIMILARITY: 1)
+      #   Service    → check AUDITREPORT → insert ISSUES_AUDITREPORT
+      #   LossEvent  → check EVENTS      → insert ISSUES_EVENTS (SIMILARITY: 1)
+      - name: link-parent
+        order: 6
+        type: LINK_PARENT
+        parameters:
+          idColumn: ID
+          parentPathColumn: Parent_Path
+          parentObjectsColumn: Parent_Objects
+          parentTypeColumn: Parent_Object_Types
+          separator: "/"
+          etlLogTable: ETL_LOG
+          currentEntityType: Issue
+          rules:
+            - parentType: SOXRisk
+              checkTable: RISK
+              relationTable: ISSUES_RISK
+              parentEntityType: Risk
+              extraColumns:
+                SIMILARITY: 1
+            - parentType: SOXControl
+              checkTable: CONTROL
+              relationTable: ISSUES_CONTROL
+              parentEntityType: Control
+              extraColumns:
+                SIMILARITY: 1
+            - parentType: Service
+              checkTable: AUDITREPORT
+              relationTable: ISSUES_AUDITREPORT
+              parentEntityType: Audit report
+            - parentType: LossEvent
+              checkTable: EVENTS
+              relationTable: ISSUES_EVENTS
+              parentEntityType: Event
+              extraColumns:
+                SIMILARITY: 1
