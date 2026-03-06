@@ -1,0 +1,107 @@
+# =============================================================================
+# SUBPROCESS IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: subprocess-import-XX (código del país)
+#   - source.location.path: /data/Subprocess-XX.xlsx
+# =============================================================================
+name: subprocess-import
+description: Import subprocess data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Subprocess-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en SUBPROCESS antes de reinsertar
+      - name: truncate-subprocess
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: SUBPROCESS
+          timestampColumn: TIMESTAMP
+
+      # Validar Sub_Process_Owner contra tabla HR
+      - name: validate-sub-process-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Sub_Process_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Subprocess
+
+      # Insertar en tabla SUBPROCESS
+      - name: insert-subprocess
+        order: 3
+        type: INSERT
+        parameters:
+          tableName: SUBPROCESS
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Sub_Process_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Sub_Process_Description"
+              dbColumn: "DESCRIPTION"
+
+      # Relación condicional: si Parent_Object_Types == "SOXProcess"
+      # → verificar en PROCESS → insertar en SUBPROCESS_PROCESS
+      - name: link-parent-process
+        order: 4
+        type: LINK_PARENT
+        parameters:
+          idColumn: ID
+          parentPathColumn: Parent_Path
+          parentObjectsColumn: Parent_Objects
+          parentTypeColumn: Parent_Object_Types
+          separator: "/"
+          etlLogTable: ETL_LOG
+          currentEntityType: Subprocess
+          rules:
+            - parentType: SOXProcess
+              checkTable: PROCESS
+              relationTable: SUBPROCESS_PROCESS
+              parentEntityType: Process

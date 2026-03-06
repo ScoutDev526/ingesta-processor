@@ -1,0 +1,73 @@
+# =============================================================================
+# RISK ASSESSMENT IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: riskassessment-import-XX (código del país)
+#   - source.location.path: /data/Risk Assessment-XX.xlsx
+# =============================================================================
+name: riskassessment-import
+description: Import risk assessment data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Risk Assessment-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en RISKASSESSMENT antes de reinsertar
+      - name: truncate-riskassessment
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: RISKASSESSMENT
+          timestampColumn: TIMESTAMP
+
+      # Insertar en tabla RISKASSESSMENT
+      - name: insert-riskassessment
+        order: 2
+        type: INSERT
+        parameters:
+          tableName: RISKASSESSMENT
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Risk_Assessment_Name"
+              dbColumn: "NAME"

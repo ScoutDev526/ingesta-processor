@@ -1,0 +1,101 @@
+# =============================================================================
+# PRODUCT IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: product-import-XX (código del país)
+#   - source.location.path: /data/Product-XX.xlsx
+# =============================================================================
+name: product-import
+description: Import product data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Product-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en PRODUCT antes de reinsertar
+      - name: truncate-product
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: PRODUCT
+          timestampColumn: TIMESTAMP
+
+      # Validar Product_Owner contra tabla HR
+      - name: validate-product-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Product_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Product
+
+      # Validar Delegate_Product_Owner contra tabla HR
+      - name: validate-delegate-product-owner
+        order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Delegate_Product_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Product
+
+      # Insertar en tabla PRODUCT
+      - name: insert-product
+        order: 4
+        type: INSERT
+        parameters:
+          tableName: PRODUCT
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Product_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Product_Description"
+              dbColumn: "DESCRIPTION"

@@ -1,0 +1,73 @@
+# =============================================================================
+# AUDIT REPORT IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: auditreport-import-XX (código del país)
+#   - source.location.path: /data/Audit Report-XX.xlsx
+# =============================================================================
+name: auditreport-import
+description: Import audit report data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Audit Report-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en AUDITREPORT antes de reinsertar
+      - name: truncate-auditreport
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: AUDITREPORT
+          timestampColumn: TIMESTAMP
+
+      # Insertar en tabla AUDITREPORT
+      - name: insert-auditreport
+        order: 2
+        type: INSERT
+        parameters:
+          tableName: AUDITREPORT
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Audit_Name"
+              dbColumn: "NAME"

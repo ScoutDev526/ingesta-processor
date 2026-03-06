@@ -1,0 +1,135 @@
+# =============================================================================
+# RISK IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: risk-import-XX (código del país)
+#   - source.location.path: /data/Risk-XX.xlsx
+# =============================================================================
+name: risk-import
+description: Import risk data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Risk-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en RISK antes de reinsertar
+      - name: truncate-risk
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: RISK
+          timestampColumn: TIMESTAMP
+
+      # Validar Risk_Owner contra tabla HR
+      - name: validate-risk-owner
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Risk_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Risk
+
+      # Validar Delegate_Risk_Owner contra tabla HR
+      - name: validate-delegate-risk-owner
+        order: 3
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Delegate_Risk_Owner
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Risk
+
+      # Insertar en tabla RISK
+      - name: insert-risk
+        order: 4
+        type: INSERT
+        parameters:
+          tableName: RISK
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Risk_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Risk_Description"
+              dbColumn: "DESCRIPTION"
+
+      # Relaciones condicionales según Parent_Object_Types:
+      #   RiskAssessment → check RISKASSESSMENT → insert RISK_RISKASSESSMENT
+      #   Submandate     → check POLICY         → insert RISK_POLICY
+      #   Requirement    → check MINIMUMSTANDARD → insert RISK_MINIMUMSTANDARD
+      #   SOXSubprocess  → check SUBPROCESS     → insert RISK_SUBPROCESS
+      - name: link-parent
+        order: 5
+        type: LINK_PARENT
+        parameters:
+          idColumn: ID
+          parentPathColumn: Parent_Path
+          parentObjectsColumn: Parent_Objects
+          parentTypeColumn: Parent_Object_Types
+          separator: "/"
+          etlLogTable: ETL_LOG
+          currentEntityType: Risk
+          rules:
+            - parentType: RiskAssessment
+              checkTable: RISKASSESSMENT
+              relationTable: RISK_RISKASSESSMENT
+              parentEntityType: Risk assessment
+            - parentType: Submandate
+              checkTable: POLICY
+              relationTable: RISK_POLICY
+              parentEntityType: Policy
+            - parentType: Requirement
+              checkTable: MINIMUMSTANDARD
+              relationTable: RISK_MINIMUMSTANDARD
+              parentEntityType: Minimum standard
+            - parentType: SOXSubprocess
+              checkTable: SUBPROCESS
+              relationTable: RISK_SUBPROCESS
+              parentEntityType: Subprocess
