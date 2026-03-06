@@ -1,0 +1,105 @@
+# =============================================================================
+# TEST PLAN IMPORT - Plantilla
+# =============================================================================
+# Duplicar este fichero por cada país, cambiando:
+#   - name: testplan-import-XX (código del país)
+#   - source.location.path: /data/Test Plan-XX.xlsx
+# =============================================================================
+name: testplan-import
+description: Import test plan data from Excel file (template - duplicate per country)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: /data/Test Plan-XX.xlsx
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: build-id
+        order: 2
+        type: CONCATENATE
+        parameters:
+          sourceColumns: ["Folder_Path", "Identifier"]
+          targetColumn: "ID"
+          separator: "/"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Borrar datos del día actual en TESTPLAN antes de reinsertar
+      - name: truncate-testplan
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: TESTPLAN
+          timestampColumn: TIMESTAMP
+
+      # Validar Test_to_be_performed_by contra tabla HR
+      - name: validate-test-performer
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: Test_to_be_performed_by
+          referenceTable: HR
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: ID
+          etlLogTable: ETL_LOG
+          currentEntityType: Test plan
+
+      # Insertar en tabla TESTPLAN
+      - name: insert-testplan
+        order: 3
+        type: INSERT
+        parameters:
+          tableName: TESTPLAN
+          autoMap: true
+          mappings:
+            - dbColumn: "ID"
+              concatenate: ["Folder_Path", "Identifier"]
+              separator: "/"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"
+            - excelColumn: "Test_Plan_Name"
+              dbColumn: "NAME"
+
+      # Relación condicional: si Parent_Object_Types == "SOXControl"
+      # → verificar en CONTROL → insertar en TESTPLAN_CONTROL
+      - name: link-parent-control
+        order: 4
+        type: LINK_PARENT
+        parameters:
+          idColumn: ID
+          parentPathColumn: Parent_Path
+          parentObjectsColumn: Parent_Objects
+          parentTypeColumn: Parent_Object_Types
+          separator: "/"
+          etlLogTable: ETL_LOG
+          currentEntityType: Test plan
+          rules:
+            - parentType: SOXControl
+              checkTable: CONTROL
+              relationTable: TESTPLAN_CONTROL
+              parentEntityType: Control
