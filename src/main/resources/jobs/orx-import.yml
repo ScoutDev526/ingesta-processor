@@ -1,0 +1,56 @@
+# =============================================================================
+# ORX IMPORT
+# =============================================================================
+# Importa datos ORX desde Excel: solo inserta filas nuevas (sin truncar).
+# Migrado desde ImportDataOSI.importORX()
+# =============================================================================
+name: orx-import
+description: Import ORX data from Excel file (insert new rows only)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: ORX
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA (sin TRUNCATE, solo inserta nuevos)
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Insertar solo filas cuyo ID no exista aún en la tabla ORX
+      # Auto-map resuelve: ID, Headline, Country Name, Region Name,
+      # Loss Amount Eur, Date First In Media, Product Level 1 Name,
+      # Process Level 1 Name, Process Level 2 Name,
+      # Basel Event Type Level 2 Name, Basel Event Type Level 1 Name,
+      # Sources, Digest Text, ORX Reference Taxonomy Level 2 Name,
+      # ORX Reference Taxonomy Level 1 Name
+      - name: insert-orx
+        order: 1
+        type: INSERT
+        parameters:
+          tableName: ORX
+          autoMap: true
+          skipExisting: true
+          idColumn: "ID"

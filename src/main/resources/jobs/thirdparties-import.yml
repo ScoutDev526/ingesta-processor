@@ -1,0 +1,38 @@
+# =============================================================================
+# THIRD PARTIES IMPORT
+# =============================================================================
+# Importa datos de terceros desde Excel: solo inserta filas nuevas (sin truncar).
+# Migrado desde ImportDataOSI.import3rdParties()
+# =============================================================================
+name: thirdparties-import
+description: Import third parties data from Excel file (insert new rows only)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: ThirdParties
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – PERSISTENCIA (sin TRUNCATE, solo inserta nuevos)
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 1
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Insertar solo filas cuyo ID no exista aún en la tabla THIRDPARTIES
+      - name: insert-thirdparties
+        order: 1
+        type: INSERT
+        parameters:
+          tableName: THIRDPARTIES
+          autoMap: true
+          skipExisting: true
+          idColumn: "ID"

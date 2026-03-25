@@ -47,4 +47,13 @@ public class ManualTriggerController {
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of("status", "UP"));
     }
+
+    @GetMapping("/test")
+    public ResponseEntity<Map<String, Object>> test() {
+        return ResponseEntity.ok(Map.of(
+                "application", "ingesta-processor",
+                "status", "UP",
+                "timestamp", java.time.Instant.now().toString()
+        ));
+    }
 }

@@ -44,4 +44,10 @@ public interface PersistencePort {
      */
     Set<Object> loadReferenceIds(String tableName, String schema, String idColumn,
                                  String timestampColumn, LocalDate date);
+
+    /**
+     * Loads all values of idColumn from a table into a Set (no timestamp filter).
+     * Used for INSERT steps with skipExisting=true to avoid inserting duplicate rows.
+     */
+    Set<Object> loadExistingIds(String tableName, String schema, String idColumn);
 }

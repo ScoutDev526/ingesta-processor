@@ -1,0 +1,62 @@
+# =============================================================================
+# CMDB IMPORT
+# =============================================================================
+# Importa datos CMDB desde Excel: trunca la tabla y reinserta todos los registros.
+# Migrado desde ImportDataOSI.importCMDB()
+# =============================================================================
+name: cmdb-import
+description: Import CMDB data from Excel file
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: CMDB
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Vaciar tabla CMDB completa antes de reinsertar
+      - name: truncate-cmdb
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: CMDB
+
+      # Insertar en tabla CMDB
+      # Auto-map resuelve: Description, Class, Status, Operational status,
+      # Environment, Asset Owner, IT Custodian, Config Admin Group
+      - name: insert-cmdb
+        order: 2
+        type: INSERT
+        parameters:
+          tableName: CMDB
+          autoMap: true
+          mappings:
+            - excelColumn: "Name"
+              dbColumn: "ID"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"

@@ -1,0 +1,64 @@
+# =============================================================================
+# SCOPE TESTING IMPORT
+# =============================================================================
+# Importa datos de Scope Testing desde Excel: filtra filas vacías, trunca y reinserta.
+# Migrado desde ImportDataOSI.importST()
+# =============================================================================
+name: scopetesting-import
+description: Import scope testing data from Excel file
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: ScopeTesting
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      # Filtrar filas donde la primera columna (Asset Name) sea null/vacía
+      - name: filter-null-rows
+        order: 2
+        type: FILTER_NULL
+        parameters:
+          column: "Asset Name"
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Vaciar tabla SCOPE_TESTING completa
+      - name: truncate-scopetesting
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: SCOPE_TESTING
+
+      # Insertar en tabla SCOPE_TESTING
+      # Auto-map resuelve: Asset Name → ASSET_NAME, Control → CONTROL,
+      # Priority → PRIORITY, SPOC Testing → SPOC_TESTING, Is Spotcheck → IS_SPOTCHECK
+      - name: insert-scopetesting
+        order: 2
+        type: INSERT
+        parameters:
+          tableName: SCOPE_TESTING
+          autoMap: true

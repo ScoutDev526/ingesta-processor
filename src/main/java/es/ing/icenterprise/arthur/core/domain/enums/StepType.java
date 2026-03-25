@@ -6,6 +6,7 @@ public enum StepType {
     UPPERCASE,
     CONCATENATE,
     DEDUPLICATE,
+    FILTER_NULL,
     // Relationship types
     LINK_PARENT,
     // Persistence types

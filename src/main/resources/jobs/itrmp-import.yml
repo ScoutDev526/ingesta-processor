@@ -1,0 +1,79 @@
+# =============================================================================
+# ITRMP IMPORT
+# =============================================================================
+# Importa datos ITRMP desde Excel: trunca, valida FK contra CMDB y reinserta.
+# Migrado desde ImportDataOSI.importITRMP()
+# NOTA: Ejecutar siempre DESPUÉS de cmdb-import para que la validación funcione.
+# =============================================================================
+name: itrmp-import
+description: Import ITRMP data from Excel file with CMDB reference validation
+enabled: true
+fileType: EXCEL
+batchSize: 500
+
+source:
+  type: RESOURCES
+  location:
+    path: ITRMP
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      # Vaciar tabla ITRMP completa antes de reinsertar
+      - name: truncate-itrmp
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: ITRMP
+
+      # Validar que el ID (Name) existe en tabla CMDB
+      - name: validate-cmdb-reference
+        order: 2
+        type: VALIDATE_REFERENCE
+        parameters:
+          fieldColumn: "Name"
+          referenceTable: CMDB
+          referenceIdColumn: ID
+          timestampColumn: TIMESTAMP
+          idColumn: "Name"
+          etlLogTable: ETL_LOG
+          currentEntityType: ITRMP
+
+      # Insertar en tabla ITRMP
+      # Auto-map resuelve: SOX Application, Asset owner, IT Asset Custodian,
+      # Region, Criticality, Confidentiality, Integrity, Availability,
+      # ITRMP Question, Application Type, Lifecycle, Question Base,
+      # Expiration Date, ITRMP in scope, Operational status,
+      # Installation status, Environment, In RMM scope
+      - name: insert-itrmp
+        order: 3
+        type: INSERT
+        parameters:
+          tableName: ITRMP
+          autoMap: true
+          mappings:
+            - excelColumn: "Name"
+              dbColumn: "ID"
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"

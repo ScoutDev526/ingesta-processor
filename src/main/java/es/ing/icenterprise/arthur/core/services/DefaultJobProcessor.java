@@ -185,6 +185,23 @@ public class DefaultJobProcessor implements JobProcessor {
                 step.addLog(LogEntry.info(step.getName(),
                         "Deduplicated on '" + keyColumn + "': removed " + removed + " duplicates, " + data.size() + " remaining"));
             }
+            case FILTER_NULL -> {
+                String column = (String) step.getParameters().get("column");
+                if (column == null) {
+                    step.addLog(LogEntry.warn(step.getName(),
+                            "FILTER_NULL step missing required parameter: 'column'"));
+                    break;
+                }
+                int before = data.size();
+                data.removeIf(action -> {
+                    Object val = action.get(column);
+                    return val == null || val.toString().isBlank();
+                });
+                int removed = before - data.size();
+                step.addLog(LogEntry.info(step.getName(),
+                        "Filtered on '" + column + "': removed " + removed + " null/blank rows, "
+                        + data.size() + " remaining"));
+            }
             default -> step.addLog(LogEntry.warn(step.getName(),
                     "Unknown transformation type: " + step.getStepType()));
         }
@@ -221,10 +238,33 @@ public class DefaultJobProcessor implements JobProcessor {
                 // Resolve mappings: auto-map Excel headers → DB columns
                 List<DatabaseMapping> mappings = resolveMappings(params, excelHeaders);
 
+                // skipExisting: filter out rows that already exist in the table
+                boolean skipExisting = Boolean.TRUE.equals(params.get("skipExisting"));
+                List<Action> effectiveData = data;
+                if (skipExisting) {
+                    String tableName = (String) params.getOrDefault("tableName", "ingesta_data");
+                    String schema = (String) params.get("schema");
+                    String idColumn = (String) params.getOrDefault("idColumn", "ID");
+                    String excelIdCol = findExcelColumnForDbColumn(idColumn, mappings);
+
+                    Set<Object> existingIds = persistencePort.loadExistingIds(tableName, schema, idColumn);
+                    int beforeCount = data.size();
+                    effectiveData = data.stream()
+                            .filter(action -> {
+                                Object idVal = action.get(excelIdCol);
+                                return idVal != null && !existingIds.contains(idVal.toString());
+                            })
+                            .toList();
+                    int skipped = beforeCount - effectiveData.size();
+                    step.addLog(LogEntry.info(step.getName(),
+                            "skipExisting: " + skipped + " rows already exist, "
+                            + effectiveData.size() + " new rows to insert"));
+                }
+
                 int batchSize = ((Number) params.getOrDefault("_batchSize", 500)).intValue();
-                int total = data.size();
+                int total = effectiveData.size();
                 for (int i = 0; i < total; i += batchSize) {
-                    List<Action> chunk = data.subList(i, Math.min(i + batchSize, total));
+                    List<Action> chunk = effectiveData.subList(i, Math.min(i + batchSize, total));
                     persistencePort.insertData(chunk, mappings, params);
                 }
                 step.getMetrics().incrementProcessed(total);
@@ -419,6 +459,14 @@ public class DefaultJobProcessor implements JobProcessor {
         Object path    = action.get(pathColumn);
         Object objects = action.get(objectsColumn);
         return (path != null ? path.toString() : "") + separator + (objects != null ? objects.toString() : "");
+    }
+
+    private String findExcelColumnForDbColumn(String dbColumn, List<DatabaseMapping> mappings) {
+        return mappings.stream()
+                .filter(m -> dbColumn.equalsIgnoreCase(m.dbColumn()) && m.excelColumn() != null)
+                .map(DatabaseMapping::excelColumn)
+                .findFirst()
+                .orElse(dbColumn);
     }
 
     private Map<String, Object> findRule(List<Map<String, Object>> rules, String parentType) {

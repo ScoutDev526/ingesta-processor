@@ -171,6 +171,14 @@ public class JdbcPersistenceAdapter implements PersistencePort {
         return new HashSet<>(ids);
     }
 
+    @Override
+    public Set<Object> loadExistingIds(String tableName, String schema, String idColumn) {
+        String fullTable = schema != null ? schema + "." + tableName : tableName;
+        String sql = "SELECT " + idColumn + " FROM " + fullTable;
+        List<Object> ids = jdbcTemplate.queryForList(sql, Object.class);
+        return new HashSet<>(ids);
+    }
+
     private Object resolveConcatenated(Action action, DatabaseMapping mapping) {
         return mapping.concatenate().stream()
                 .map(col -> {
