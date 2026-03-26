@@ -94,7 +94,7 @@ class IngestaServiceTest {
 
         JobDefinition disabledDef = new JobDefinition(
                 "disabled-job", "Disabled", false,
-                createSource(), FileType.EXCEL, List.of(), Map.of(), 500, 0);
+                createSource(), FileType.EXCEL, List.of(), Map.of(), 500, 0, false);
 
         ProcessReport emptyReport = ProcessReport.builder()
                 .executionStart(java.time.Instant.now())
@@ -191,13 +191,13 @@ class IngestaServiceTest {
     private JobDefinition createSampleDefinition() {
         return new JobDefinition(
                 "test-job", "Test", true,
-                createSource(), FileType.EXCEL, List.of(), Map.of(), 500, 0);
+                createSource(), FileType.EXCEL, List.of(), Map.of(), 500, 0, false);
     }
 
     private JobDefinition createDefinitionWithName(String name) {
         return new JobDefinition(
                 name, "Description for " + name, true,
-                createSource(), FileType.EXCEL, List.of(), Map.of(), 500, 0);
+                createSource(), FileType.EXCEL, List.of(), Map.of(), 500, 0, false);
     }
 
     private FileSourceDefinition createSource() {

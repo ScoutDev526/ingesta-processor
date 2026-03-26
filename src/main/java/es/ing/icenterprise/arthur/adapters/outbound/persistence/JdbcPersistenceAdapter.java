@@ -179,6 +179,57 @@ public class JdbcPersistenceAdapter implements PersistencePort {
         return new HashSet<>(ids);
     }
 
+    @Override
+    public void updateData(List<Action> data, List<DatabaseMapping> mappings,
+                           Map<String, Object> parameters, String idColumn) {
+        String tableName = (String) parameters.getOrDefault("tableName", "ingesta_data");
+        log.info("Updating {} records in table: {} by idColumn: {}", data.size(), tableName, idColumn);
+
+        if (data.isEmpty() || mappings.isEmpty()) return;
+
+        // Find the mapping for the ID column (used in WHERE clause)
+        DatabaseMapping idMapping = mappings.stream()
+                .filter(m -> idColumn.equalsIgnoreCase(m.dbColumn()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No mapping found for idColumn: " + idColumn));
+
+        // SET columns = all mappings except the ID column
+        List<DatabaseMapping> setCols = mappings.stream()
+                .filter(m -> !idColumn.equalsIgnoreCase(m.dbColumn()))
+                .toList();
+
+        if (setCols.isEmpty()) {
+            log.warn("No columns to update (only ID mapped) for table {}", tableName);
+            return;
+        }
+
+        String setClause = setCols.stream()
+                .map(m -> m.dbColumn() + " = ?")
+                .collect(Collectors.joining(", "));
+
+        String sql = String.format("UPDATE %s SET %s WHERE %s = ?", tableName, setClause, idColumn);
+        log.debug("Generated UPDATE SQL: {}", sql);
+
+        LocalDate ingestDate = (LocalDate) parameters.getOrDefault("_ingestDate", LocalDate.now());
+        Timestamp ingestTimestamp = Timestamp.valueOf(ingestDate.atStartOfDay());
+
+        List<Object[]> batchArgs = data.stream()
+                .map(action -> {
+                    List<Object> args = new ArrayList<>();
+                    // SET values
+                    for (DatabaseMapping m : setCols) {
+                        args.add(resolveValue(action, m, ingestTimestamp));
+                    }
+                    // WHERE value
+                    args.add(resolveValue(action, idMapping, ingestTimestamp));
+                    return args.toArray();
+                })
+                .toList();
+
+        jdbcTemplate.batchUpdate(sql, batchArgs);
+        log.info("Successfully updated {} records in {}", data.size(), tableName);
+    }
+
     private Object resolveConcatenated(Action action, DatabaseMapping mapping) {
         return mapping.concatenate().stream()
                 .map(col -> {

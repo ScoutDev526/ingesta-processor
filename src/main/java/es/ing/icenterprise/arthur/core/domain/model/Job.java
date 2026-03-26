@@ -14,22 +14,28 @@ public class Job {
     private final FileType fileType;
     private final int batchSize;
     private final int sheetIndex;
+    private final boolean processAllSheets;
     private final List<Task> tasks;
     private final Metrics metrics;
     private final List<LogEntry> logs;
     private Status status;
 
     public Job(String name, String filePath, FileType fileType) {
-        this(name, filePath, fileType, 500, 0);
+        this(name, filePath, fileType, 500, 0, false);
     }
 
     public Job(String name, String filePath, FileType fileType, int batchSize, int sheetIndex) {
+        this(name, filePath, fileType, batchSize, sheetIndex, false);
+    }
+
+    public Job(String name, String filePath, FileType fileType, int batchSize, int sheetIndex, boolean processAllSheets) {
         this.id = UUID.randomUUID();
         this.name = name;
         this.filePath = filePath;
         this.fileType = fileType;
         this.batchSize = batchSize;
         this.sheetIndex = sheetIndex;
+        this.processAllSheets = processAllSheets;
         this.tasks = new ArrayList<>();
         this.metrics = new Metrics();
         this.logs = new ArrayList<>();
@@ -70,6 +76,7 @@ public class Job {
     public FileType getFileType() { return fileType; }
     public int getBatchSize() { return batchSize; }
     public int getSheetIndex() { return sheetIndex; }
+    public boolean isProcessAllSheets() { return processAllSheets; }
     public List<Task> getTasks() { return List.copyOf(tasks); }
     public Metrics getMetrics() { return metrics; }
     public List<LogEntry> getLogs() { return List.copyOf(logs); }

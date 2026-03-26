@@ -1,0 +1,59 @@
+# =============================================================================
+# VALUE CHAIN IMPORT
+# =============================================================================
+# Importa datos de Value Chain desde un Excel con múltiples hojas.
+# Cada hoja representa una tabla cuyo nombre es el nombre de la hoja.
+# Para cada fila: si el ID ya existe → UPDATE, si no → INSERT (UPSERT).
+# Solo se usan las 2 primeras columnas de cada hoja + TIMESTAMP autogenerado.
+# Migrado desde ImportDataValueChain.py
+# =============================================================================
+name: valuechain-import
+description: Import Value Chain data from multi-sheet Excel file (upsert per sheet)
+enabled: true
+fileType: EXCEL
+batchSize: 500
+processAllSheets: true
+
+source:
+  type: RESOURCES
+  location:
+    path: ValueChain
+
+parameters:
+  schema: INGESTA
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # TAREA 1 – TRANSFORMACIÓN DE DATOS
+  # ---------------------------------------------------------------------------
+  - name: clean-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+  # ---------------------------------------------------------------------------
+  # TAREA 2 – PERSISTENCIA EN BASE DE DATOS (UPSERT)
+  # ---------------------------------------------------------------------------
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: false
+    subtasks:
+      # Upsert: INSERT nuevas filas, UPDATE las existentes (por primera columna = ID)
+      # autoMap: true mapeará las 2 columnas de cada hoja automáticamente
+      # tableName se sobreescribe con el nombre de la hoja (processAllSheets)
+      - name: upsert-data
+        order: 1
+        type: INSERT
+        parameters:
+          tableName: _FROM_SHEET_
+          autoMap: true
+          upsertMode: true
+          idColumn: ID
+          mappings:
+            - dbColumn: "TIMESTAMP"
+              autoGenerate: "TIMESTAMP"

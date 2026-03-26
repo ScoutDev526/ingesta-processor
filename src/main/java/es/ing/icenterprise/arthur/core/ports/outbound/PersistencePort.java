@@ -50,4 +50,10 @@ public interface PersistencePort {
      * Used for INSERT steps with skipExisting=true to avoid inserting duplicate rows.
      */
     Set<Object> loadExistingIds(String tableName, String schema, String idColumn);
+
+    /**
+     * Updates existing rows matched by idColumn. Each row's ID value is used in the WHERE clause.
+     * Only mapped columns (excluding the ID column itself) are updated.
+     */
+    void updateData(List<Action> data, List<DatabaseMapping> mappings, Map<String, Object> parameters, String idColumn);
 }

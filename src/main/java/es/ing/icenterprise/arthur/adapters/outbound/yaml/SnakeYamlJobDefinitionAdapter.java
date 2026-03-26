@@ -42,6 +42,7 @@ public class SnakeYamlJobDefinitionAdapter implements JobDefinitionLoaderPort {
         FileType fileType = FileType.valueOf(((String) data.get("fileType")).toUpperCase());
         int batchSize = (int) data.getOrDefault("batchSize", 500);
         int sheetIndex = (int) data.getOrDefault("sheetIndex", 0);
+        boolean processAllSheets = (boolean) data.getOrDefault("processAllSheets", false);
         Map<String, Object> parameters = (Map<String, Object>) data.getOrDefault("parameters", Map.of());
 
         // Source
@@ -54,7 +55,7 @@ public class SnakeYamlJobDefinitionAdapter implements JobDefinitionLoaderPort {
                 .map(this::mapToTaskDefinition)
                 .toList();
 
-        return new JobDefinition(name, description, enabled, source, fileType, tasks, parameters, batchSize, sheetIndex);
+        return new JobDefinition(name, description, enabled, source, fileType, tasks, parameters, batchSize, sheetIndex, processAllSheets);
     }
 
     @SuppressWarnings("unchecked")

@@ -26,7 +26,8 @@ public class JobFactory {
                 dataFilePath.toString(),
                 definition.fileType(),
                 definition.batchSize(),
-                definition.sheetIndex()
+                definition.sheetIndex(),
+                definition.processAllSheets()
         );
 
         // Inject _batchSize into job-level params so INSERT steps can chunk by it

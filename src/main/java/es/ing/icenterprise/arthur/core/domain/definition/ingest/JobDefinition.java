@@ -14,7 +14,8 @@ public record JobDefinition(
     List<TaskDefinition> tasks,
     Map<String, Object> parameters,
     int batchSize,
-    int sheetIndex
+    int sheetIndex,
+    boolean processAllSheets
 ) {
     public JobDefinition {
         if (batchSize <= 0) batchSize = 500;

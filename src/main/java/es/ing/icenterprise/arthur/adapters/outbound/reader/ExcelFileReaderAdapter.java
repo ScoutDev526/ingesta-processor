@@ -93,6 +93,20 @@ public class ExcelFileReaderAdapter implements FileReaderPort {
     }
 
     @Override
+    public List<String> getSheetNames(Path filePath) {
+        try (Workbook workbook = WorkbookFactory.create(filePath.toFile())) {
+            List<String> names = new ArrayList<>();
+            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+                names.add(workbook.getSheetName(i));
+            }
+            log.info("Found {} sheets in {}: {}", names.size(), filePath, names);
+            return names;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read sheet names from: " + filePath, e);
+        }
+    }
+
+    @Override
     public FileMetadata readFileMetadata(Path filePath) {
         try {
             long fileSize = Files.size(filePath);

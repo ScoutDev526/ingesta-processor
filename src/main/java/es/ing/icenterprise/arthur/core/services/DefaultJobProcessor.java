@@ -49,42 +49,103 @@ public class DefaultJobProcessor implements JobProcessor {
         log.info("Processing job: {}", job.getName());
 
         try {
-            // Read data from file
-            List<Action> data = readFileData(job);
-
-            // Extract Excel headers from first row
-            List<String> excelHeaders = data.isEmpty()
-                    ? List.of()
-                    : new ArrayList<>(data.get(0).data().keySet());
-
-            // Extract ingest date from filename (e.g. 2026-03-02-Name.xlsx), fallback to today
-            LocalDate ingestDate = extractIngestDate(job.getFilePath());
-
-            // Process each task
-            boolean hasFailure = false;
-            for (Task task : job.getTasks()) {
-                try {
-                    processTask(task, data, excelHeaders, ingestDate);
-                } catch (Exception e) {
-                    hasFailure = true;
-                    task.addLog(LogEntry.error(task.getName(), "Task failed: " + e.getMessage(), e));
-                    task.complete(Status.FAILED);
-                    if (task.isStopOnFailure()) {
-                        job.addLog(LogEntry.error(job.getName(),
-                                "Stopping job due to task failure: " + task.getName()));
-                        break;
-                    }
-                }
+            if (job.isProcessAllSheets()) {
+                processJobAllSheets(job);
+            } else {
+                processJobSingleSheet(job);
             }
-
-            Status jobStatus = determineJobStatus(job, hasFailure);
-            job.complete(jobStatus);
-
         } catch (Exception e) {
             log.error("Job '{}' failed: {}", job.getName(), e.getMessage(), e);
             job.addLog(LogEntry.error(job.getName(), "Job failed: " + e.getMessage(), e));
             job.complete(Status.FAILED);
         }
+    }
+
+    private void processJobSingleSheet(Job job) {
+        // Read data from file
+        List<Action> data = readFileData(job);
+
+        // Extract Excel headers from first row
+        List<String> excelHeaders = data.isEmpty()
+                ? List.of()
+                : new ArrayList<>(data.get(0).data().keySet());
+
+        // Extract ingest date from filename (e.g. 2026-03-02-Name.xlsx), fallback to today
+        LocalDate ingestDate = extractIngestDate(job.getFilePath());
+
+        // Process each task
+        boolean hasFailure = processAllTasks(job, data, excelHeaders, ingestDate, null);
+
+        Status jobStatus = determineJobStatus(job, hasFailure);
+        job.complete(jobStatus);
+    }
+
+    /**
+     * Processes all sheets in the Excel file. Each sheet is treated as a separate table
+     * whose name matches the sheet name. Tasks are executed once per sheet.
+     */
+    private void processJobAllSheets(Job job) {
+        FileReaderPort reader = fileReaders.stream()
+                .filter(r -> r.supports(job.getFileType()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No reader found for file type: " + job.getFileType()));
+
+        List<String> sheetNames = reader.getSheetNames(Path.of(job.getFilePath()));
+        log.info("processAllSheets: found {} sheets in {}", sheetNames.size(), job.getFilePath());
+
+        LocalDate ingestDate = extractIngestDate(job.getFilePath());
+        boolean hasFailure = false;
+
+        for (int i = 0; i < sheetNames.size(); i++) {
+            String sheetName = sheetNames.get(i);
+            log.info("Processing sheet {}/{}: '{}'", i + 1, sheetNames.size(), sheetName);
+
+            Map<String, Object> readerParams = Map.of("sheetIndex", i);
+            List<Action> data = new ArrayList<>();
+            try (Stream<Map<String, Object>> stream = reader.read(Path.of(job.getFilePath()), readerParams)) {
+                stream.forEach(row -> data.add(new Action(row)));
+            }
+
+            if (data.isEmpty()) {
+                job.addLog(LogEntry.warn(job.getName(), "Sheet '" + sheetName + "' is empty, skipping"));
+                continue;
+            }
+
+            List<String> excelHeaders = new ArrayList<>(data.get(0).data().keySet());
+            job.addLog(LogEntry.info(job.getName(),
+                    "Sheet '" + sheetName + "': read " + data.size() + " rows, columns: " + excelHeaders));
+
+            hasFailure |= processAllTasks(job, data, excelHeaders, ingestDate, sheetName);
+        }
+
+        Status jobStatus = determineJobStatus(job, hasFailure);
+        job.complete(jobStatus);
+    }
+
+    /**
+     * Runs all tasks in the job against the given data.
+     * @param sheetTableName if non-null, overrides the tableName parameter in persistence steps.
+     * @return true if any task failed
+     */
+    private boolean processAllTasks(Job job, List<Action> data, List<String> excelHeaders,
+                                    LocalDate ingestDate, String sheetTableName) {
+        boolean hasFailure = false;
+        for (Task task : job.getTasks()) {
+            try {
+                processTask(task, data, excelHeaders, ingestDate, sheetTableName);
+            } catch (Exception e) {
+                hasFailure = true;
+                task.addLog(LogEntry.error(task.getName(), "Task failed: " + e.getMessage(), e));
+                task.complete(Status.FAILED);
+                if (task.isStopOnFailure()) {
+                    job.addLog(LogEntry.error(job.getName(),
+                            "Stopping job due to task failure: " + task.getName()));
+                    break;
+                }
+            }
+        }
+        return hasFailure;
     }
 
     private List<Action> readFileData(Job job) {
@@ -105,13 +166,14 @@ public class DefaultJobProcessor implements JobProcessor {
         return actions;
     }
 
-    private void processTask(Task task, List<Action> data, List<String> excelHeaders, LocalDate ingestDate) {
+    private void processTask(Task task, List<Action> data, List<String> excelHeaders,
+                             LocalDate ingestDate, String sheetTableName) {
         task.start();
         log.info("Processing task: {} (type: {})", task.getName(), task.getTaskType());
 
         switch (task.getTaskType()) {
             case TRANSFORMATION -> processTransformationTask(task, data);
-            case PERSISTENCE -> processPersistenceTask(task, data, excelHeaders, ingestDate);
+            case PERSISTENCE -> processPersistenceTask(task, data, excelHeaders, ingestDate, sheetTableName);
         }
 
         if (task.getStatus() == Status.RUNNING) {
@@ -209,11 +271,12 @@ public class DefaultJobProcessor implements JobProcessor {
 
     // ======================== PERSISTENCE ========================
 
-    private void processPersistenceTask(Task task, List<Action> data, List<String> excelHeaders, LocalDate ingestDate) {
+    private void processPersistenceTask(Task task, List<Action> data, List<String> excelHeaders,
+                                       LocalDate ingestDate, String sheetTableName) {
         for (Step step : task.getSteps()) {
             step.start();
             try {
-                executePersistenceStep(step, data, excelHeaders, ingestDate);
+                executePersistenceStep(step, data, excelHeaders, ingestDate, sheetTableName);
                 step.complete(Status.SUCCESS);
             } catch (Exception e) {
                 step.addLog(LogEntry.error(step.getName(), "Persistence step failed: " + e.getMessage(), e));
@@ -223,54 +286,83 @@ public class DefaultJobProcessor implements JobProcessor {
         }
     }
 
-    private void executePersistenceStep(Step step, List<Action> data, List<String> excelHeaders, LocalDate ingestDate) {
+    private void executePersistenceStep(Step step, List<Action> data, List<String> excelHeaders,
+                                       LocalDate ingestDate, String sheetTableName) {
         log.debug("Executing persistence step: {}", step.getStepType());
 
         Map<String, Object> params = new HashMap<>(step.getParameters());
         params.put("_ingestDate", ingestDate);
 
+        // When processing all sheets, override tableName with the sheet name
+        if (sheetTableName != null) {
+            params.put("tableName", sheetTableName);
+        }
+
         switch (step.getStepType()) {
             case TRUNCATE -> {
                 persistencePort.truncate(params);
-                step.addLog(LogEntry.info(step.getName(), "Table truncated"));
+                step.addLog(LogEntry.info(step.getName(),
+                        "Table '" + params.get("tableName") + "' truncated"));
             }
             case INSERT -> {
                 // Resolve mappings: auto-map Excel headers → DB columns
                 List<DatabaseMapping> mappings = resolveMappings(params, excelHeaders);
 
-                // skipExisting: filter out rows that already exist in the table
+                String tableName = (String) params.getOrDefault("tableName", "ingesta_data");
+                String schema = (String) params.get("schema");
+                String idColumn = (String) params.getOrDefault("idColumn", "ID");
                 boolean skipExisting = Boolean.TRUE.equals(params.get("skipExisting"));
-                List<Action> effectiveData = data;
-                if (skipExisting) {
-                    String tableName = (String) params.getOrDefault("tableName", "ingesta_data");
-                    String schema = (String) params.get("schema");
-                    String idColumn = (String) params.getOrDefault("idColumn", "ID");
-                    String excelIdCol = findExcelColumnForDbColumn(idColumn, mappings);
+                boolean upsertMode = Boolean.TRUE.equals(params.get("upsertMode"));
 
+                List<Action> toInsert = data;
+                List<Action> toUpdate = List.of();
+
+                if (skipExisting || upsertMode) {
+                    String excelIdCol = findExcelColumnForDbColumn(idColumn, mappings);
                     Set<Object> existingIds = persistencePort.loadExistingIds(tableName, schema, idColumn);
-                    int beforeCount = data.size();
-                    effectiveData = data.stream()
-                            .filter(action -> {
-                                Object idVal = action.get(excelIdCol);
-                                return idVal != null && !existingIds.contains(idVal.toString());
-                            })
-                            .toList();
-                    int skipped = beforeCount - effectiveData.size();
+
+                    List<Action> newRows = new ArrayList<>();
+                    List<Action> existingRows = new ArrayList<>();
+                    for (Action action : data) {
+                        Object idVal = action.get(excelIdCol);
+                        if (idVal != null && existingIds.contains(idVal.toString())) {
+                            existingRows.add(action);
+                        } else if (idVal != null) {
+                            newRows.add(action);
+                        }
+                    }
+
+                    toInsert = newRows;
+                    if (upsertMode) {
+                        toUpdate = existingRows;
+                    }
                     step.addLog(LogEntry.info(step.getName(),
-                            "skipExisting: " + skipped + " rows already exist, "
-                            + effectiveData.size() + " new rows to insert"));
+                            toInsert.size() + " new rows to insert, "
+                            + existingRows.size() + " existing rows"
+                            + (upsertMode ? " to update" : " skipped")));
                 }
 
+                // INSERT new rows
                 int batchSize = ((Number) params.getOrDefault("_batchSize", 500)).intValue();
-                int total = effectiveData.size();
-                for (int i = 0; i < total; i += batchSize) {
-                    List<Action> chunk = effectiveData.subList(i, Math.min(i + batchSize, total));
+                int totalInserted = toInsert.size();
+                for (int i = 0; i < totalInserted; i += batchSize) {
+                    List<Action> chunk = toInsert.subList(i, Math.min(i + batchSize, totalInserted));
                     persistencePort.insertData(chunk, mappings, params);
                 }
-                step.getMetrics().incrementProcessed(total);
+
+                // UPDATE existing rows (upsert mode)
+                int totalUpdated = toUpdate.size();
+                if (totalUpdated > 0) {
+                    for (int i = 0; i < totalUpdated; i += batchSize) {
+                        List<Action> chunk = toUpdate.subList(i, Math.min(i + batchSize, totalUpdated));
+                        persistencePort.updateData(chunk, mappings, params, idColumn);
+                    }
+                }
+
+                step.getMetrics().incrementProcessed(totalInserted + totalUpdated);
                 step.addLog(LogEntry.info(step.getName(),
-                        "Inserted " + total + " records in chunks of " + batchSize
-                        + " (" + mappings.size() + " columns mapped)"));
+                        "Inserted " + totalInserted + ", updated " + totalUpdated
+                        + " records (" + mappings.size() + " columns mapped)"));
             }
             case SELECT -> {
                 Object result = persistencePort.check(null, params);
