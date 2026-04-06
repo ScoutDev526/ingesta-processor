@@ -3,6 +3,7 @@ package es.ing.icenterprise.arthur.adapters.inbound.rest;
 import es.ing.icenterprise.arthur.core.domain.model.ProcessReport;
 import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteCommand;
 import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteProcessUseCase;
+import es.ing.icenterprise.arthur.core.services.DepartmentUpdateService;
 import es.ing.icenterprise.arthur.core.services.RoleOwnershipService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,11 +18,14 @@ public class ManualTriggerController {
 
     private final ExecuteProcessUseCase executeProcessUseCase;
     private final RoleOwnershipService roleOwnershipService;
+    private final DepartmentUpdateService departmentUpdateService;
 
     public ManualTriggerController(ExecuteProcessUseCase executeProcessUseCase,
-                                   RoleOwnershipService roleOwnershipService) {
+                                   RoleOwnershipService roleOwnershipService,
+                                   DepartmentUpdateService departmentUpdateService) {
         this.executeProcessUseCase = executeProcessUseCase;
         this.roleOwnershipService = roleOwnershipService;
+        this.departmentUpdateService = departmentUpdateService;
     }
 
     @PostMapping("/execute")
@@ -65,6 +69,21 @@ public class ManualTriggerController {
                 "timestamp", timestamp.toString(),
                 "rolesProcessed", result.rolesProcessed(),
                 "totalRecords", result.totalRecords()
+        ));
+    }
+
+    @PostMapping("/departments/update")
+    public ResponseEntity<Map<String, Object>> updateDepartments(
+            @RequestParam(required = false) String date) {
+
+        LocalDate timestamp = (date != null) ? LocalDate.parse(date) : LocalDate.now();
+        DepartmentUpdateService.DepartmentUpdateResult result = departmentUpdateService.execute(timestamp);
+
+        return ResponseEntity.ok(Map.of(
+                "status", "SUCCESS",
+                "timestamp", timestamp.toString(),
+                "departmentsProcessed", result.departmentsProcessed(),
+                "departmentsInserted", result.departmentsInserted()
         ));
     }
 
