@@ -230,6 +230,25 @@ public class JdbcPersistenceAdapter implements PersistencePort {
         log.info("Successfully updated {} records in {}", data.size(), tableName);
     }
 
+    @Override
+    public Map<String, String> lookupValues(String tableName, String schema, String keyColumn,
+                                            String valueColumn, String timestampColumn) {
+        String fullTable = schema != null ? schema + "." + tableName : tableName;
+        String sql = timestampColumn != null
+                ? "SELECT " + keyColumn + ", " + valueColumn + " FROM " + fullTable
+                  + " WHERE " + timestampColumn + " = (SELECT MAX(" + timestampColumn + ") FROM " + fullTable + ")"
+                : "SELECT " + keyColumn + ", " + valueColumn + " FROM " + fullTable;
+
+        Map<String, String> result = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            String key = rs.getString(1);
+            String value = rs.getString(2);
+            if (key != null) result.put(key.toLowerCase(), value);
+        });
+        log.info("Loaded {} lookup entries from {}.{} → {}", result.size(), fullTable, keyColumn, valueColumn);
+        return result;
+    }
+
     private Object resolveConcatenated(Action action, DatabaseMapping mapping) {
         return mapping.concatenate().stream()
                 .map(col -> {

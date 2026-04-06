@@ -264,6 +264,43 @@ public class DefaultJobProcessor implements JobProcessor {
                         "Filtered on '" + column + "': removed " + removed + " null/blank rows, "
                         + data.size() + " remaining"));
             }
+            case LOOKUP -> {
+                String sourceColumn   = (String) step.getParameters().get("sourceColumn");
+                String targetColumn   = (String) step.getParameters().get("targetColumn");
+                String refTable       = (String) step.getParameters().get("referenceTable");
+                String refKeyColumn   = (String) step.getParameters().get("referenceKeyColumn");
+                String refValueColumn = (String) step.getParameters().get("referenceValueColumn");
+                String tsColumn       = (String) step.getParameters().get("timestampColumn");
+                @SuppressWarnings("unchecked")
+                List<String> nullValues = (List<String>) step.getParameters().getOrDefault("nullValues", List.of());
+
+                if (sourceColumn == null || targetColumn == null || refTable == null
+                        || refKeyColumn == null || refValueColumn == null) {
+                    step.addLog(LogEntry.warn(step.getName(),
+                            "LOOKUP step missing required parameters: sourceColumn, targetColumn, referenceTable, referenceKeyColumn, referenceValueColumn"));
+                    break;
+                }
+
+                // Load the full map once to avoid N+1 queries
+                Map<String, String> lookupMap = persistencePort.lookupValues(refTable, null, refKeyColumn, refValueColumn, tsColumn);
+
+                int resolved = 0, nulled = 0;
+                for (Action action : data) {
+                    Object raw = action.get(sourceColumn);
+                    String key = raw != null ? raw.toString().trim() : "";
+                    if (key.isBlank() || nullValues.contains(key)) {
+                        action.data().put(targetColumn, null);
+                        nulled++;
+                    } else {
+                        String value = lookupMap.get(key.toLowerCase());
+                        action.data().put(targetColumn, value);
+                        if (value != null) resolved++; else nulled++;
+                    }
+                }
+                step.addLog(LogEntry.info(step.getName(), String.format(
+                        "LOOKUP '%s' → '%s' via %s.%s: %d resolved, %d set to null",
+                        sourceColumn, targetColumn, refTable, refValueColumn, resolved, nulled)));
+            }
             default -> step.addLog(LogEntry.warn(step.getName(),
                     "Unknown transformation type: " + step.getStepType()));
         }
@@ -365,7 +402,7 @@ public class DefaultJobProcessor implements JobProcessor {
                         + " records (" + mappings.size() + " columns mapped)"));
             }
             case SELECT -> {
-                Object result = persistencePort.check(null, params);
+                persistencePort.check(null, params);
                 step.addLog(LogEntry.info(step.getName(), "Check completed"));
             }
             case LINK_PARENT -> executeLinkParent(step, data, params);

@@ -1,0 +1,82 @@
+name: hubwoo-contracts-import
+description: Import Hubwoo contracts data from Excel into CONTRACTS table
+enabled: true
+fileType: EXCEL
+sheetIndex: 0
+batchSize: 500
+
+source:
+  type: SHAREPOINT
+  location:
+    path: HUBWOO
+
+tasks:
+  - name: transform-data
+    order: 1
+    type: TRANSFORMATION
+    stopOnFailure: true
+    subtasks:
+      - name: trim-whitespace
+        order: 1
+        type: TRIM
+
+      - name: resolve-owner-ck
+        order: 2
+        type: LOOKUP
+        parameters:
+          sourceColumn: Business_Contract_Owner
+          targetColumn: Business_Contract_Owner
+          referenceTable: hr
+          referenceKeyColumn: mail
+          referenceValueColumn: id
+          timestampColumn: timestamp
+          nullValues:
+            - "Unknown"
+            - ""
+
+  - name: persist-data
+    order: 2
+    type: PERSISTENCE
+    stopOnFailure: true
+    subtasks:
+      - name: truncate-contracts
+        order: 1
+        type: TRUNCATE
+        parameters:
+          tableName: CONTRACTS
+
+      - name: insert-contracts
+        order: 2
+        type: INSERT
+        parameters:
+          tableName: CONTRACTS
+          autoMap: false
+          mappings:
+            - excelColumn: "Master_Agreement_ID"
+              dbColumn: "ID"
+            - excelColumn: "Agreement_Name"
+              dbColumn: "NAME"
+            - excelColumn: "Description"
+              dbColumn: "DESCRIPTION"
+            - excelColumn: "Vendor_DUNS"
+              dbColumn: "DUNS"
+            - excelColumn: "Supplier"
+              dbColumn: "SUPPLIER"
+            - excelColumn: "Expiration_Date"
+              dbColumn: "EXPIRATION"
+            - excelColumn: "Business_Contract_Owner"
+              dbColumn: "OWNER"
+            - excelColumn: "Sourcing_Policy_Applicable"
+              dbColumn: "SOURCING_POLICY_APPLICABLE"
+            - excelColumn: "Next_SSR"
+              dbColumn: "NEXT_SSR_DATE"
+            - excelColumn: "Next_SRM"
+              dbColumn: "NEXT_SRM_DATE"
+            - excelColumn: "Next_PPR"
+              dbColumn: "NEXT_PPR_DATE"
+            - excelColumn: "Notify_Renewal_Termination_Date"
+              dbColumn: "NOTIFY_RENEWAL_TERMINATION_DATE"
+            - excelColumn: "Service_Start_Date"
+              dbColumn: "SERVICE_START_DATE"
+            - excelColumn: "Status"
+              dbColumn: "STATUS"

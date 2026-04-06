@@ -56,4 +56,20 @@ public interface PersistencePort {
      * Only mapped columns (excluding the ID column itself) are updated.
      */
     void updateData(List<Action> data, List<DatabaseMapping> mappings, Map<String, Object> parameters, String idColumn);
+
+    /**
+     * Loads a full key→value map from a reference table for in-memory lookups.
+     * If timestampColumn is provided, only the most recent snapshot is loaded
+     * (WHERE timestampColumn = MAX(timestampColumn)). Keys are lowercased for
+     * case-insensitive matching.
+     *
+     * @param tableName       reference table name
+     * @param schema          schema prefix (nullable)
+     * @param keyColumn       column whose value is the lookup key (e.g. "mail")
+     * @param valueColumn     column whose value is the lookup result (e.g. "id")
+     * @param timestampColumn column to filter by latest snapshot, or null to skip
+     * @return map of lowercased key → value
+     */
+    Map<String, String> lookupValues(String tableName, String schema, String keyColumn,
+                                     String valueColumn, String timestampColumn);
 }
