@@ -297,7 +297,7 @@ public class DefaultJobProcessor implements JobProcessor {
                         if (value != null) resolved++; else nulled++;
                     }
                 }
-                step.addLog(LogEntry.info(step.getName(), String.format(
+                step.addLog(LogEntry.summary(step.getName(), String.format(
                         "LOOKUP '%s' → '%s' via %s.%s: %d resolved, %d set to null",
                         sourceColumn, targetColumn, refTable, refValueColumn, resolved, nulled)));
             }
@@ -397,7 +397,7 @@ public class DefaultJobProcessor implements JobProcessor {
                 }
 
                 step.getMetrics().incrementProcessed(totalInserted + totalUpdated);
-                step.addLog(LogEntry.info(step.getName(),
+                step.addLog(LogEntry.summary(step.getName(),
                         "Inserted " + totalInserted + ", updated " + totalUpdated
                         + " records (" + mappings.size() + " columns mapped)"));
             }
@@ -483,8 +483,11 @@ public class DefaultJobProcessor implements JobProcessor {
 
             if (!validIds.contains(fieldValue)) {
                 String currentId = idColumn != null ? String.valueOf(action.get(idColumn)) : "?";
-                log.warn("VALIDATE_REFERENCE [{}]: value '{}' not found in '{}'. Record ID='{}'",
+                log.debug("VALIDATE_REFERENCE [{}]: value '{}' not found in '{}'. Record ID='{}'",
                         fieldColumn, fieldValue, referenceTable, currentId);
+                step.addLog(LogEntry.trace(step.getName(), String.format(
+                        "VALIDATE_REFERENCE [%s]: value '%s' not found in '%s'. Record ID='%s'",
+                        fieldColumn, fieldValue, referenceTable, currentId)));
                 insertEtlLog(etlLogTable, schema,
                         "Unknown", fieldColumn, fieldValue.toString(),
                         currentEntityType, currentId, "loading data with empty value", ingestDate);
@@ -494,7 +497,7 @@ public class DefaultJobProcessor implements JobProcessor {
         }
 
         step.getMetrics().incrementProcessed(data.size());
-        step.addLog(LogEntry.info(step.getName(), String.format(
+        step.addLog(LogEntry.summary(step.getName(), String.format(
                 "VALIDATE_REFERENCE '%s' → '%s.%s': %d invalid values cleared",
                 fieldColumn, referenceTable, referenceIdColumn, cleared)));
     }
@@ -550,8 +553,11 @@ public class DefaultJobProcessor implements JobProcessor {
                     persistencePort.insertRow(relationTable, schema, row);
                     linked++;
                 } else {
-                    log.warn("LINK_PARENT [{}]: parent '{}' not found in '{}'. Record ID='{}'",
+                    log.debug("LINK_PARENT [{}]: parent '{}' not found in '{}'. Record ID='{}'",
                             parentType, parentId, checkTable, currentId);
+                    step.addLog(LogEntry.trace(step.getName(), String.format(
+                            "Not found %s [%s] for %s node (%s) [%s], relationship not loaded",
+                            parentEntityType, parentId, currentEntityType, step.getName(), currentId)));
                     insertEtlLog(etlLogTable, schema, parentEntityType, parentId,
                             currentEntityType, currentId, "Unknown", "relationship not loaded", ingestDate);
                     notFound++;
@@ -564,7 +570,7 @@ public class DefaultJobProcessor implements JobProcessor {
             }
         }
 
-        step.addLog(LogEntry.info(step.getName(), String.format(
+        step.addLog(LogEntry.summary(step.getName(), String.format(
                 "LINK_PARENT: %d linked, %d parent not found, %d unknown parentType",
                 linked, notFound, unknownType)));
     }

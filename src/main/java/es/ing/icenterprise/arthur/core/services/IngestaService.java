@@ -1,5 +1,6 @@
 package es.ing.icenterprise.arthur.core.services;
 
+import es.ing.icenterprise.arthur.adapters.outbound.report.ExcelReportStore;
 import es.ing.icenterprise.arthur.core.domain.definition.ingest.JobDefinition;
 import es.ing.icenterprise.arthur.core.domain.factory.ingest.JobFactory;
 import es.ing.icenterprise.arthur.core.domain.model.*;
@@ -12,7 +13,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -27,6 +31,12 @@ public class IngestaService implements ExecuteProcessUseCase {
     @Value("${ingesta.parallel-jobs:1}")
     private int parallelJobs;
 
+    @Value("${ingesta.working-directory:/tmp/ingesta}")
+    private String workingDirectory;
+
+    @Value("${ingesta.report.title:ESClassificationSystem}")
+    private String reportTitle;
+
     private final YamlScannerPort yamlScanner;
     private final JobDefinitionLoaderPort jobDefinitionLoader;
     private final List<FileDownloaderPort> fileDownloaders;
@@ -35,6 +45,8 @@ public class IngestaService implements ExecuteProcessUseCase {
     private final MetricsCollector metricsCollector;
     private final NotificationPort notificationPort;
     private final CleanupWorkingDirectoryPort cleanupPort;
+    private final ExecutionLogExporterPort executionLogExporter;
+    private final ExcelReportStore excelReportStore;
 
     public IngestaService(YamlScannerPort yamlScanner,
                           JobDefinitionLoaderPort jobDefinitionLoader,
@@ -43,7 +55,9 @@ public class IngestaService implements ExecuteProcessUseCase {
                           JobProcessor jobProcessor,
                           MetricsCollector metricsCollector,
                           NotificationPort notificationPort,
-                          CleanupWorkingDirectoryPort cleanupPort) {
+                          CleanupWorkingDirectoryPort cleanupPort,
+                          ExecutionLogExporterPort executionLogExporter,
+                          ExcelReportStore excelReportStore) {
         this.yamlScanner = yamlScanner;
         this.jobDefinitionLoader = jobDefinitionLoader;
         this.fileDownloaders = fileDownloaders;
@@ -52,6 +66,8 @@ public class IngestaService implements ExecuteProcessUseCase {
         this.metricsCollector = metricsCollector;
         this.notificationPort = notificationPort;
         this.cleanupPort = cleanupPort;
+        this.executionLogExporter = executionLogExporter;
+        this.excelReportStore = excelReportStore;
     }
 
     @Override
@@ -120,6 +136,20 @@ public class IngestaService implements ExecuteProcessUseCase {
 
         // 5. Collect metrics and build report
         ProcessReport report = metricsCollector.collect(jobs, command.manuallyTriggered());
+
+        // 5b. Generate Excel log report and store it
+        try {
+            byte[] excel = executionLogExporter.export(jobs, reportTitle);
+            excelReportStore.save(report.getId(), excel);
+
+            String filename = "ingesta-report-" + LocalDate.now() + ".xlsx";
+            Path reportPath = Path.of(workingDirectory, filename);
+            Files.createDirectories(reportPath.getParent());
+            Files.write(reportPath, excel);
+            log.info("Excel report saved to: {}", reportPath);
+        } catch (Exception e) {
+            log.warn("Failed to generate Excel report: {}", e.getMessage());
+        }
 
         // 6. Send notification
         try {

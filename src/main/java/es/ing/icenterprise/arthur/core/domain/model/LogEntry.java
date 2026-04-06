@@ -41,6 +41,14 @@ public class LogEntry {
         return new LogEntry(Instant.now(), LogLevel.ERROR, message, source, null, null);
     }
 
+    public static LogEntry trace(String source, String message) {
+        return new LogEntry(Instant.now(), LogLevel.TRACE, message, source, null, null);
+    }
+
+    public static LogEntry summary(String source, String message) {
+        return new LogEntry(Instant.now(), LogLevel.SUMMARY, message, source, null, null);
+    }
+
     public LogEntry withContext(String key, String value) {
         this.context.put(key, value);
         return this;

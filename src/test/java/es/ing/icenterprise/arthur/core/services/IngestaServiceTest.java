@@ -1,5 +1,6 @@
 package es.ing.icenterprise.arthur.core.services;
 
+import es.ing.icenterprise.arthur.adapters.outbound.report.ExcelReportStore;
 import es.ing.icenterprise.arthur.core.domain.definition.ingest.*;
 import es.ing.icenterprise.arthur.core.domain.factory.ingest.JobFactory;
 import es.ing.icenterprise.arthur.core.domain.model.*;
@@ -33,6 +34,8 @@ class IngestaServiceTest {
     @Mock private MetricsCollector metricsCollector;
     @Mock private NotificationPort notificationPort;
     @Mock private CleanupWorkingDirectoryPort cleanupPort;
+    @Mock private ExecutionLogExporterPort executionLogExporter;
+    @Mock private ExcelReportStore excelReportStore;
 
     private JobFactory jobFactory;
     private IngestaService service;
@@ -50,7 +53,9 @@ class IngestaServiceTest {
                 jobProcessor,
                 metricsCollector,
                 notificationPort,
-                cleanupPort
+                cleanupPort,
+                executionLogExporter,
+                excelReportStore
         );
     }
 
