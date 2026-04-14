@@ -59,7 +59,7 @@ public class ExcelExecutionLogAdapter implements ExecutionLogExporterPort {
 
             // --- Sheet 1: global (all jobs) ---
             List<LogEntry> allLogs = new ArrayList<>();
-            Status worstGlobal = Status.SUCCESS;
+            Status worstGlobal = Status.PENDING;
             for (Job job : jobs) {
                 allLogs.addAll(collectLogs(job));
                 worstGlobal = worst(worstGlobal, job.getStatus());
@@ -83,7 +83,7 @@ public class ExcelExecutionLogAdapter implements ExecutionLogExporterPort {
                 sheetName = uniqueSheetName(wb, sheetName);
 
                 List<LogEntry> jobLogs = new ArrayList<>();
-                Status worstStatus = Status.SUCCESS;
+                Status worstStatus = Status.PENDING;
                 for (Job job : entry.getValue()) {
                     jobLogs.addAll(collectLogs(job));
                     worstStatus = worst(worstStatus, job.getStatus());

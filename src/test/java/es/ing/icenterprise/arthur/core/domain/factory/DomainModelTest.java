@@ -162,6 +162,32 @@ class DomainModelTest {
         assertThat(report.getStatus()).isEqualTo(Status.SUCCESS);
     }
 
+    @Test
+    @DisplayName("LogEntry.trace() and summary() create correct levels")
+    void logEntryTraceAndSummaryLevels() {
+        LogEntry trace = LogEntry.trace("source", "detail message");
+        assertThat(trace.getLevel()).isEqualTo(LogLevel.TRACE);
+        assertThat(trace.getMessage()).isEqualTo("detail message");
+        assertThat(trace.getSource()).isEqualTo("source");
+        assertThat(trace.getTimestamp()).isNotNull();
+
+        LogEntry summary = LogEntry.summary("source", "total: 42 records");
+        assertThat(summary.getLevel()).isEqualTo(LogLevel.SUMMARY);
+        assertThat(summary.getMessage()).isEqualTo("total: 42 records");
+    }
+
+    @Test
+    @DisplayName("TRACE and SUMMARY logs do not increment error or warning counters")
+    void traceAndSummaryDoNotIncrementMetricCounters() {
+        Job job = new Job("test-job", "/file.xlsx", FileType.EXCEL);
+        job.addLog(LogEntry.trace("source", "trace detail"));
+        job.addLog(LogEntry.summary("source", "summary total"));
+
+        assertThat(job.getMetrics().getErrorCount()).isZero();
+        assertThat(job.getMetrics().getWarningCount()).isZero();
+        assertThat(job.getLogs()).hasSize(2);
+    }
+
     private Job createCompletedJob(String name, Status status, long processed, long failed) {
         Job job = new Job(name, "/file.xlsx", FileType.EXCEL);
         job.start();
