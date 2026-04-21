@@ -7,6 +7,7 @@ import es.ing.icenterprise.arthur.core.domain.model.*;
 import es.ing.icenterprise.arthur.core.domain.enums.*;
 import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteCommand;
 import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteProcessUseCase;
+import es.ing.icenterprise.arthur.core.ports.inbound.ExtractDataHrUseCase;
 import es.ing.icenterprise.arthur.core.ports.outbound.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +20,8 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+
+import es.ing.icenterprise.arthur.core.domain.model.PersonLdap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -47,6 +50,7 @@ public class IngestaService implements ExecuteProcessUseCase {
     private final CleanupWorkingDirectoryPort cleanupPort;
     private final ExecutionLogExporterPort executionLogExporter;
     private final ExcelReportStore excelReportStore;
+    private final ExtractDataHrUseCase extractDataHrUseCase;
 
     public IngestaService(YamlScannerPort yamlScanner,
                           JobDefinitionLoaderPort jobDefinitionLoader,
@@ -57,7 +61,8 @@ public class IngestaService implements ExecuteProcessUseCase {
                           NotificationPort notificationPort,
                           CleanupWorkingDirectoryPort cleanupPort,
                           ExecutionLogExporterPort executionLogExporter,
-                          ExcelReportStore excelReportStore) {
+                          ExcelReportStore excelReportStore,
+                          ExtractDataHrUseCase extractDataHrUseCase) {
         this.yamlScanner = yamlScanner;
         this.jobDefinitionLoader = jobDefinitionLoader;
         this.fileDownloaders = fileDownloaders;
@@ -68,6 +73,7 @@ public class IngestaService implements ExecuteProcessUseCase {
         this.cleanupPort = cleanupPort;
         this.executionLogExporter = executionLogExporter;
         this.excelReportStore = excelReportStore;
+        this.extractDataHrUseCase = extractDataHrUseCase;
     }
 
     @Override
@@ -76,6 +82,13 @@ public class IngestaService implements ExecuteProcessUseCase {
                 command.manuallyTriggered(), command.jobFilter());
 
         List<Job> jobs = new ArrayList<>();
+
+        // 0. Populate HR table from LDAP (Active Directory) before any YAML job runs.
+        //    The HR table feeds DepartmentUpdateService and RoleOwnershipService, so it
+        //    must be refreshed first. A failure here is logged as a FAILED synthetic job
+        //    but does not abort the rest of the pipeline. It is kept out of the list
+        //    passed to jobProcessor so the processor does not try to re-run it.
+        Job ldapHrJob = runLdapHrImport();
 
         try {
             // 1. Scan for YAML job definitions
@@ -127,12 +140,16 @@ public class IngestaService implements ExecuteProcessUseCase {
                     pool.shutdown();
                 }
             } else {
-                jobProcessor.process(jobs);
+                jobProcessor.process(List.copyOf(jobs));
             }
 
         } catch (Exception e) {
             log.error("Ingestion process failed: {}", e.getMessage(), e);
         }
+
+        // 4b. Add the LDAP HR pre-ingestion job to the list so it appears in the
+        //     report alongside the YAML jobs.
+        jobs.add(0, ldapHrJob);
 
         // 5. Collect metrics and build report
         ProcessReport report = metricsCollector.collect(jobs, command.manuallyTriggered());
@@ -173,6 +190,25 @@ public class IngestaService implements ExecuteProcessUseCase {
                 report.getStatus(), report.getTotalDurationMs());
 
         return report;
+    }
+
+    private Job runLdapHrImport() {
+        Job ldapJob = new Job("ldap-hr-import", "N/A", FileType.EXCEL);
+        ldapJob.start();
+        try {
+            log.info("Running LDAP HR pre-ingestion step");
+            List<PersonLdap> imported = extractDataHrUseCase.extractDataHr();
+            ldapJob.getMetrics().incrementProcessed(imported.size());
+            ldapJob.addLog(LogEntry.info("ldap-hr-import",
+                    "LDAP HR ingestion completed: " + imported.size() + " rows loaded into hr"));
+            ldapJob.complete(imported.isEmpty() ? Status.PARTIAL : Status.SUCCESS);
+        } catch (Exception e) {
+            log.error("LDAP HR pre-ingestion failed: {}", e.getMessage(), e);
+            ldapJob.addLog(LogEntry.error("ldap-hr-import",
+                    "LDAP HR ingestion failed: " + e.getMessage(), e));
+            ldapJob.complete(Status.FAILED);
+        }
+        return ldapJob;
     }
 
     private Path downloadFile(JobDefinition definition) {

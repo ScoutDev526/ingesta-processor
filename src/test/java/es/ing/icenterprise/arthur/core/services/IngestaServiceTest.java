@@ -6,7 +6,9 @@ import es.ing.icenterprise.arthur.core.domain.factory.ingest.JobFactory;
 import es.ing.icenterprise.arthur.core.domain.model.*;
 import es.ing.icenterprise.arthur.core.domain.enums.*;
 import es.ing.icenterprise.arthur.core.ports.inbound.ExecuteCommand;
+import es.ing.icenterprise.arthur.core.ports.inbound.ExtractDataHrUseCase;
 import es.ing.icenterprise.arthur.core.ports.outbound.*;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,7 @@ class IngestaServiceTest {
     @Mock private CleanupWorkingDirectoryPort cleanupPort;
     @Mock private ExecutionLogExporterPort executionLogExporter;
     @Mock private ExcelReportStore excelReportStore;
+    @Mock private ExtractDataHrUseCase extractDataHrUseCase;
 
     private JobFactory jobFactory;
     private IngestaService service;
@@ -55,7 +58,8 @@ class IngestaServiceTest {
                 notificationPort,
                 cleanupPort,
                 executionLogExporter,
-                excelReportStore
+                excelReportStore,
+                extractDataHrUseCase
         );
     }
 
@@ -189,6 +193,50 @@ class IngestaServiceTest {
         // Should not throw
         ProcessReport result = service.execute(ExecuteCommand.fromManual());
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should run LDAP HR pre-ingestion before YAML jobs and include it in the report")
+    void shouldRunLdapHrPreIngestion() throws IOException {
+        when(yamlScanner.scanJobDefinitions()).thenReturn(List.of());
+        when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(createSuccessReport());
+        when(extractDataHrUseCase.extractDataHr()).thenReturn(List.of());
+
+        service.execute(ExecuteCommand.fromManual());
+
+        // LDAP pre-step must run
+        verify(extractDataHrUseCase, times(1)).extractDataHr();
+
+        // The report (via metricsCollector) must include the ldap-hr-import synthetic job
+        ArgumentCaptor<List<Job>> captor = ArgumentCaptor.forClass(List.class);
+        verify(metricsCollector).collect(captor.capture(), anyBoolean());
+        assertThat(captor.getValue())
+                .extracting(Job::getName)
+                .contains("ldap-hr-import");
+
+        // The processor must NOT receive the synthetic LDAP job
+        verify(jobProcessor).process(argThat(list ->
+                list.stream().noneMatch(j -> "ldap-hr-import".equals(j.getName()))));
+    }
+
+    @Test
+    @DisplayName("Should not abort the pipeline when LDAP pre-ingestion fails")
+    void shouldContinueWhenLdapFails() throws IOException {
+        when(yamlScanner.scanJobDefinitions()).thenReturn(List.of());
+        when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(createSuccessReport());
+        when(extractDataHrUseCase.extractDataHr()).thenThrow(new RuntimeException("LDAP down"));
+
+        ProcessReport result = service.execute(ExecuteCommand.fromManual());
+
+        assertThat(result).isNotNull();
+
+        ArgumentCaptor<List<Job>> captor = ArgumentCaptor.forClass(List.class);
+        verify(metricsCollector).collect(captor.capture(), anyBoolean());
+        Job ldapJob = captor.getValue().stream()
+                .filter(j -> "ldap-hr-import".equals(j.getName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(ldapJob.getStatus()).isEqualTo(Status.FAILED);
     }
 
     // === Helpers ===
