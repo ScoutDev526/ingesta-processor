@@ -14,6 +14,15 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+  ldap:
+    urls: ${LDAP_URL:ldap://ad.ing.net:389}
+    base: DC=ad,DC=ing,DC=net
+    username: ${LDAP_USER:}
+    password: ${LDAP_PASSWORD:}
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
 ingesta:
   jobs:
     path: classpath:jobs
