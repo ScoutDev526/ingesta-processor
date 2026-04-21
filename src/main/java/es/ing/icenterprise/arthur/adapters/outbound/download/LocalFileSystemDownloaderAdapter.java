@@ -96,14 +96,16 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
      *
      * <ul>
      *   <li>{@code suffix} is the whole name.
-     *   <li>The character immediately before the suffix is whitespace.
+     *   <li>The character immediately before the suffix is any non-alphanumeric separator OTHER
+     *       than a plain {@code '-'} — typical cases: whitespace, {@code '_'} (e.g.
+     *       {@code "Table_CMDB.xlsx"}).
      *   <li>The character immediately before the suffix is a {@code '-'} that closes a
-     *       {@code YYYY-MM-DD-} date prefix.
+     *       {@code YYYY-MM-DD-} date prefix (e.g. {@code "2025-01-01-Report-ES.xlsx"}).
      * </ul>
      *
      * <p>A plain {@code '-'} is NOT treated as a boundary by itself, because dataset names may
-     * contain hyphens (e.g. {@code "Sub-Processes-ES"}). Without this, suffix {@code "Processes-ES"}
-     * would incorrectly match a file named {@code "...Full Dump Sub-Processes-ES.xlsx"}.
+     * contain internal hyphens (e.g. {@code "Sub-Processes-ES"}). Without that exception, suffix
+     * {@code "Processes-ES"} would incorrectly match {@code "...Full Dump Sub-Processes-ES.xlsx"}.
      */
     private static boolean endsWithAtWordBoundary(String name, String suffix) {
         if (!name.endsWith(suffix)) {
@@ -114,14 +116,17 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
             return true;
         }
         char before = name.charAt(boundary - 1);
-        if (Character.isWhitespace(before)) {
-            return true;
+        if (Character.isLetterOrDigit(before)) {
+            return false;
         }
-        if (before == '-' && boundary >= DATE_PREFIX_LENGTH) {
+        if (before == '-') {
+            if (boundary < DATE_PREFIX_LENGTH) {
+                return false;
+            }
             String datePrefix = name.substring(boundary - DATE_PREFIX_LENGTH, boundary);
             return DATE_PREFIX_PATTERN.matcher(datePrefix).matches();
         }
-        return false;
+        return true;
     }
 
     private static final int DATE_PREFIX_LENGTH = 11; // "YYYY-MM-DD-"
