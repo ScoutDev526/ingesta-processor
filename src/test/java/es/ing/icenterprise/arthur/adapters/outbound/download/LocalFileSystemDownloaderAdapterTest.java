@@ -217,6 +217,29 @@ class LocalFileSystemDownloaderAdapterTest {
     }
 
     @Test
+    @DisplayName("download with dataDirectory resolves Table_CMDB.xlsx and Table_ITRMP.xlsx (underscore separator)")
+    void downloadWithDataDirectoryAcceptsUnderscoreSeparator() throws IOException {
+        Path cmdb = sourceDir.resolve("Table_CMDB.xlsx");
+        Path itrmp = sourceDir.resolve("Table_ITRMP.xlsx");
+        Files.writeString(cmdb, "cmdb");
+        Files.writeString(itrmp, "itrmp");
+
+        ReflectionTestUtils.setField(adapter, "dataDirectory", sourceDir.toString());
+
+        Path resolvedCmdb = adapter.download(new FileSourceDefinition(
+                FileSourceType.RESOURCES,
+                new FileSourceLocationDefinition("CMDB"),
+                null));
+        assertThat(resolvedCmdb.getFileName().toString()).isEqualTo("Table_CMDB.xlsx");
+
+        Path resolvedItrmp = adapter.download(new FileSourceDefinition(
+                FileSourceType.RESOURCES,
+                new FileSourceLocationDefinition("ITRMP"),
+                null));
+        assertThat(resolvedItrmp.getFileName().toString()).isEqualTo("Table_ITRMP.xlsx");
+    }
+
+    @Test
     @DisplayName("download with dataDirectory throws when no matching file found")
     void downloadWithDataDirectoryThrowsWhenNoMatch() throws IOException {
         ReflectionTestUtils.setField(adapter, "dataDirectory", sourceDir.toString());
