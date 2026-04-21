@@ -70,10 +70,9 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
                     .filter(Files::isRegularFile)
                     .filter(p -> {
                         String name = p.getFileName().toString().toLowerCase();
-                        // Strip extension, then check if name ends with the suffix
                         int dotIndex = name.lastIndexOf('.');
                         String nameWithoutExt = dotIndex > 0 ? name.substring(0, dotIndex) : name;
-                        return nameWithoutExt.endsWith(suffixLower);
+                        return endsWithAtWordBoundary(nameWithoutExt, suffixLower);
                     })
                     .max(Comparator.comparing(p -> p.getFileName().toString()))
                     .orElse(null);
@@ -87,6 +86,24 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
         }
 
         throw new RuntimeException("No file matching suffix '" + suffix + "' found in data directory: " + dataDirectory);
+    }
+
+    /**
+     * True when {@code name} ends with {@code suffix} AND the character immediately before the
+     * suffix is not a letter or digit (or the suffix is the whole name).
+     *
+     * <p>Without this boundary check, suffix "process-es" would incorrectly match
+     * "subprocess-es.xlsx" because `"subprocess-es".endsWith("process-es")` is true.
+     */
+    private static boolean endsWithAtWordBoundary(String name, String suffix) {
+        if (!name.endsWith(suffix)) {
+            return false;
+        }
+        int boundary = name.length() - suffix.length();
+        if (boundary == 0) {
+            return true;
+        }
+        return !Character.isLetterOrDigit(name.charAt(boundary - 1));
     }
 
     private Path resolveSource(String resourcePath) {

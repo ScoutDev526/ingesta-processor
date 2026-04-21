@@ -123,6 +123,53 @@ class LocalFileSystemDownloaderAdapterTest {
     }
 
     @Test
+    @DisplayName("download with dataDirectory 'Process-ES' does NOT pick a 'SubProcess-ES' file")
+    void downloadWithDataDirectoryRespectsWordBoundary() throws IOException {
+        Path processFile = sourceDir.resolve("2026-04-21-Full Dump Process-ES.xlsx");
+        Path subprocessFile = sourceDir.resolve("2026-04-21-Full Dump SubProcess-ES.xlsx");
+        Files.writeString(processFile, "process");
+        Files.writeString(subprocessFile, "subprocess");
+
+        ReflectionTestUtils.setField(adapter, "dataDirectory", sourceDir.toString());
+
+        FileSourceDefinition processSource = new FileSourceDefinition(
+                FileSourceType.RESOURCES,
+                new FileSourceLocationDefinition("Process-ES"),
+                null);
+
+        Path processResult = adapter.download(processSource);
+        assertThat(processResult.getFileName().toString())
+                .isEqualTo("2026-04-21-Full Dump Process-ES.xlsx");
+
+        FileSourceDefinition subprocessSource = new FileSourceDefinition(
+                FileSourceType.RESOURCES,
+                new FileSourceLocationDefinition("SubProcess-ES"),
+                null);
+
+        Path subprocessResult = adapter.download(subprocessSource);
+        assertThat(subprocessResult.getFileName().toString())
+                .isEqualTo("2026-04-21-Full Dump SubProcess-ES.xlsx");
+    }
+
+    @Test
+    @DisplayName("download with dataDirectory 'Process-ES' fails if only a 'SubProcess-ES' file exists")
+    void downloadWithDataDirectoryDoesNotMatchSubprocessWhenSearchingProcess() throws IOException {
+        Path subprocessFile = sourceDir.resolve("2026-04-21-Full Dump SubProcess-ES.xlsx");
+        Files.writeString(subprocessFile, "subprocess");
+
+        ReflectionTestUtils.setField(adapter, "dataDirectory", sourceDir.toString());
+
+        FileSourceDefinition source = new FileSourceDefinition(
+                FileSourceType.RESOURCES,
+                new FileSourceLocationDefinition("Process-ES"),
+                null);
+
+        assertThatThrownBy(() -> adapter.download(source))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("No file matching suffix");
+    }
+
+    @Test
     @DisplayName("download with dataDirectory throws when no matching file found")
     void downloadWithDataDirectoryThrowsWhenNoMatch() throws IOException {
         ReflectionTestUtils.setField(adapter, "dataDirectory", sourceDir.toString());
