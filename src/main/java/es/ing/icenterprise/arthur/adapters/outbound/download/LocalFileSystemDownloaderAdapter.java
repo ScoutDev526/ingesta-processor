@@ -13,6 +13,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.*;
 import java.util.Comparator;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @Component
@@ -89,11 +90,20 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
     }
 
     /**
-     * True when {@code name} ends with {@code suffix} AND the character immediately before the
-     * suffix is not a letter or digit (or the suffix is the whole name).
+     * True when {@code name} ends with {@code suffix} at a real boundary.
      *
-     * <p>Without this boundary check, suffix "process-es" would incorrectly match
-     * "subprocess-es.xlsx" because `"subprocess-es".endsWith("process-es")` is true.
+     * <p>A boundary is real when any of the following holds:
+     *
+     * <ul>
+     *   <li>{@code suffix} is the whole name.
+     *   <li>The character immediately before the suffix is whitespace.
+     *   <li>The character immediately before the suffix is a {@code '-'} that closes a
+     *       {@code YYYY-MM-DD-} date prefix.
+     * </ul>
+     *
+     * <p>A plain {@code '-'} is NOT treated as a boundary by itself, because dataset names may
+     * contain hyphens (e.g. {@code "Sub-Processes-ES"}). Without this, suffix {@code "Processes-ES"}
+     * would incorrectly match a file named {@code "...Full Dump Sub-Processes-ES.xlsx"}.
      */
     private static boolean endsWithAtWordBoundary(String name, String suffix) {
         if (!name.endsWith(suffix)) {
@@ -103,8 +113,19 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
         if (boundary == 0) {
             return true;
         }
-        return !Character.isLetterOrDigit(name.charAt(boundary - 1));
+        char before = name.charAt(boundary - 1);
+        if (Character.isWhitespace(before)) {
+            return true;
+        }
+        if (before == '-' && boundary >= DATE_PREFIX_LENGTH) {
+            String datePrefix = name.substring(boundary - DATE_PREFIX_LENGTH, boundary);
+            return DATE_PREFIX_PATTERN.matcher(datePrefix).matches();
+        }
+        return false;
     }
+
+    private static final int DATE_PREFIX_LENGTH = 11; // "YYYY-MM-DD-"
+    private static final Pattern DATE_PREFIX_PATTERN = Pattern.compile("\\d{4}-\\d{2}-\\d{2}-");
 
     private Path resolveSource(String resourcePath) {
         // 1. Try as absolute/relative filesystem path
