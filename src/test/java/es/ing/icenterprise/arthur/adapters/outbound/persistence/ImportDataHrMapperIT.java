@@ -18,7 +18,7 @@ import org.springframework.test.context.TestPropertySource;
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 @TestPropertySource(
         properties = {
-            "spring.datasource.url=jdbc:h2:mem:hrtest;MODE=Oracle;DATABASE_TO_LOWER=true;DB_CLOSE_DELAY=-1",
+            "spring.datasource.url=jdbc:h2:mem:hrtest;DB_CLOSE_DELAY=-1",
             "spring.datasource.driver-class-name=org.h2.Driver",
             "spring.datasource.username=sa",
             "spring.datasource.password="
@@ -62,15 +62,15 @@ class ImportDataHrMapperIT {
     }
 
     @Test
-    @DisplayName("deleteByDayString deletes rows matching the given day in Oracle format")
-    void deleteByDayStringDeletesMatchingRows() {
+    @DisplayName("deleteByTimestamp deletes rows matching the given timestamp")
+    void deleteByTimestampDeletesMatchingRows() {
         LocalDateTime ts = LocalDateTime.of(2026, 4, 14, 0, 0);
         insertMapper.insertOne(
                 new ImportDataHrPerson("A1", "A", "a@i.com", "HR", "NT1", "T", ts));
         insertMapper.insertOne(
                 new ImportDataHrPerson("B2", "B", "b@i.com", "HR", "NT2", "T", ts));
 
-        int deleted = deleteMapper.deleteByDayString("14-APR-26");
+        int deleted = deleteMapper.deleteByTimestamp(ts);
 
         assertThat(deleted).isEqualTo(2);
         Integer remaining = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM hr", Integer.class);
