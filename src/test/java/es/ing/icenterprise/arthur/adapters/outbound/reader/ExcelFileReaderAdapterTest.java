@@ -2,6 +2,9 @@ package es.ing.icenterprise.arthur.adapters.outbound.reader;
 
 import es.ing.icenterprise.arthur.core.domain.enums.FileType;
 import es.ing.icenterprise.arthur.core.domain.model.FileMetadata;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CreationHelper;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -11,7 +14,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -160,6 +166,76 @@ class ExcelFileReaderAdapterTest {
         assertThat(meta.records()).isEqualTo(3);
         assertThat(meta.filePath()).contains("meta.xlsx");
         assertThat(meta.fileSize()).isGreaterThan(0);
+    }
+
+    // ── cell types via streaming reader ───────────────────────────────────────
+
+    @Test
+    @DisplayName("read returns java.sql.Timestamp for date-formatted numeric cells")
+    void readReturnsTimestampForDateFormattedCells() throws IOException {
+        LocalDateTime when = LocalDateTime.of(2026, 4, 23, 10, 30, 0);
+        Path file = tempDir.resolve("date.xlsx");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("S");
+            sheet.createRow(0).createCell(0).setCellValue("When");
+
+            CreationHelper helper = wb.getCreationHelper();
+            CellStyle dateStyle = wb.createCellStyle();
+            dateStyle.setDataFormat(helper.createDataFormat().getFormat("yyyy-mm-dd hh:mm:ss"));
+            Cell cell = sheet.createRow(1).createCell(0);
+            cell.setCellValue(when);
+            cell.setCellStyle(dateStyle);
+
+            try (FileOutputStream fos = new FileOutputStream(file.toFile())) { wb.write(fos); }
+        }
+
+        List<Map<String, Object>> rows;
+        try (Stream<Map<String, Object>> stream = adapter.read(file)) {
+            rows = stream.toList();
+        }
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get("When"))
+                .isInstanceOf(Timestamp.class)
+                .isEqualTo(Timestamp.valueOf(when));
+    }
+
+    @Test
+    @DisplayName("read returns the cached numeric result for formula cells")
+    void readReturnsCachedValueForFormulaCells() throws IOException {
+        Path file = tempDir.resolve("formula.xlsx");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("S");
+            sheet.createRow(0).createCell(0).setCellValue("Calc");
+            Cell cell = sheet.createRow(1).createCell(0);
+            cell.setCellFormula("1+2");
+            // Pre-evaluate so the workbook is stored with a cached NUMERIC result (3.0)
+            wb.getCreationHelper().createFormulaEvaluator().evaluateFormulaCell(cell);
+
+            try (FileOutputStream fos = new FileOutputStream(file.toFile())) { wb.write(fos); }
+        }
+
+        List<Map<String, Object>> rows;
+        try (Stream<Map<String, Object>> stream = adapter.read(file)) {
+            rows = stream.toList();
+        }
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get("Calc")).isEqualTo(3.0);
+    }
+
+    @Test
+    @DisplayName("closing the Stream releases the workbook (file is deletable afterwards)")
+    void closingStreamReleasesWorkbookHandle() throws IOException {
+        Path file = createExcel("close.xlsx", List.of("A"), List.of("v1"), List.of("v2"));
+
+        try (Stream<Map<String, Object>> stream = adapter.read(file)) {
+            // consume partially to exercise lazy path
+            assertThat(stream.findFirst()).isPresent();
+        }
+
+        // If the workbook handle leaked, Windows would refuse to delete the file here.
+        assertThat(Files.deleteIfExists(file)).isTrue();
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
