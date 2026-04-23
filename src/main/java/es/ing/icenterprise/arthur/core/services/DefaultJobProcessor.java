@@ -358,8 +358,8 @@ public class DefaultJobProcessor implements JobProcessor {
                     String excelIdCol = findExcelColumnForDbColumn(idColumn, mappings);
                     Set<Object> existingIds = persistencePort.loadExistingIds(tableName, schema, idColumn);
 
-                    List<Action> newRows = new ArrayList<>();
-                    List<Action> existingRows = new ArrayList<>();
+                    List<Action> newRows = new ArrayList<>(data.size() / 2);
+                    List<Action> existingRows = new ArrayList<>(data.size() / 2);
                     for (Action action : data) {
                         Object idVal = action.get(excelIdCol);
                         if (idVal != null && existingIds.contains(idVal.toString())) {
