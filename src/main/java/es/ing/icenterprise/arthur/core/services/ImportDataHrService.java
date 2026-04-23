@@ -7,7 +7,9 @@ import es.ing.icenterprise.arthur.core.domain.model.PersonLdap;
 import es.ing.icenterprise.arthur.core.ports.inbound.ImportDataHrUseCase;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,11 +29,13 @@ public class ImportDataHrService implements ImportDataHrUseCase {
     public void importDataHr(List<PersonLdap> ldapPersons) {
         LocalDateTime timestamp = LocalDate.now().atStartOfDay();
 
+        String day = toOldDayString(timestamp); // "14-APR-26"
+
         log.info("Cleaning HR tables for {}...", timestamp);
 
-        int deleted = importDataHrDeleteMapper.deleteByTimestamp(timestamp);
+        int deleted = importDataHrDeleteMapper.deleteByDayString(day);
 
-        log.info("Deleted {} rows from HR for timestamp {}", deleted, timestamp);
+        log.info("Deleted {} rows from HR for day {}", deleted, day);
 
         log.info("Loading HR for {}...", timestamp);
 
@@ -83,5 +87,17 @@ public class ImportDataHrService implements ImportDataHrUseCase {
         int start = cn + 3;
         int end = dn.indexOf(',', start);
         return (end > start ? dn.substring(start, end) : dn.substring(start)).trim();
+    }
+
+    /**
+     * To old day string string.
+     *
+     * @param ts the ts
+     * @return the string
+     */
+    // "14-APR-26"
+    public static String toOldDayString(LocalDateTime ts) {
+        DateTimeFormatter f = DateTimeFormatter.ofPattern("dd-MMM-yy", Locale.ENGLISH);
+        return ts.toLocalDate().format(f).toUpperCase(Locale.ENGLISH);
     }
 }

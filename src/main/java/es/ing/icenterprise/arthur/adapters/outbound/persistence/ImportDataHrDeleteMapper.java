@@ -1,26 +1,24 @@
 package es.ing.icenterprise.arthur.adapters.outbound.persistence;
 
-import java.time.LocalDateTime;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-/**
- * Deletes HR rows for a given day before the LDAP ingestion reinserts.
- *
- * <p>Uses a direct {@code timestamp} equality check (JDBC-level type conversion) rather than an
- * Oracle-specific {@code TO_TIMESTAMP(string, format, nls)} call, so the same SQL works on
- * Oracle (production) and H2 (tests).
- */
+/** Deletes HR rows for a given day-string ("dd-MMM-yy") before the LDAP ingestion reinserts. */
 @Mapper
 public interface ImportDataHrDeleteMapper {
 
     /**
-     * Delete HR rows whose {@code timestamp} matches the given value.
+     * Delete by day string int.
      *
-     * @param timestamp start-of-day of the ingestion date
-     * @return number of deleted rows
+     * @param day the day
+     * @return the int
      */
-    @Delete("DELETE FROM hr WHERE timestamp = #{timestamp,jdbcType=TIMESTAMP}")
-    int deleteByTimestamp(@Param("timestamp") LocalDateTime timestamp);
+    @Delete(
+            "DELETE FROM hr "
+                    + "WHERE timestamp = TO_TIMESTAMP("
+                    + "#{day}, "
+                    + "'DD-MON-RR', "
+                    + "'NLS_DATE_LANGUAGE=ENGLISH')")
+    int deleteByDayString(@Param("day") String day);
 }
