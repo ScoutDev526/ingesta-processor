@@ -36,6 +36,7 @@ class IngestaServiceTest {
     @Mock private MetricsCollector metricsCollector;
     @Mock private NotificationPort notificationPort;
     @Mock private CleanupWorkingDirectoryPort cleanupPort;
+    @Mock private ArchiveProcessedFilePort archivePort;
     @Mock private ExecutionLogExporterPort executionLogExporter;
     @Mock private ExcelReportStore excelReportStore;
     @Mock private ExtractDataHrUseCase extractDataHrUseCase;
@@ -57,6 +58,7 @@ class IngestaServiceTest {
                 metricsCollector,
                 notificationPort,
                 cleanupPort,
+                archivePort,
                 executionLogExporter,
                 excelReportStore,
                 extractDataHrUseCase
@@ -237,6 +239,25 @@ class IngestaServiceTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(ldapJob.getStatus()).isEqualTo(Status.FAILED);
+    }
+
+    @Test
+    @DisplayName("Should archive xlsx data files and not call cleanup.delete on them")
+    void shouldArchiveXlsxFilesAfterProcessing() throws IOException {
+        Path tempYaml = Files.createTempFile("job-def", ".yml");
+        Path tempData = Files.createTempFile("data", ".xlsx");
+        tempYaml.toFile().deleteOnExit();
+        tempData.toFile().deleteOnExit();
+
+        when(yamlScanner.scanJobDefinitions()).thenReturn(List.of(tempYaml));
+        when(jobDefinitionLoader.load(tempYaml)).thenReturn(createSampleDefinition());
+        when(fileDownloader.download(any())).thenReturn(tempData);
+        when(metricsCollector.collect(anyList(), anyBoolean())).thenReturn(createSuccessReport());
+
+        service.execute(ExecuteCommand.fromManual());
+
+        verify(archivePort).archive(tempData);
+        verify(cleanupPort, never()).delete(tempData);
     }
 
     // === Helpers ===
