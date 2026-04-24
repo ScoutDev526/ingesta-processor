@@ -17,11 +17,17 @@ public interface PersistencePort {
      * Inserts data using resolved column mappings.
      * Only mapped columns are inserted; Excel columns without mapping are ignored.
      *
+     * <p>On a batch failure the implementation is expected to bisect the chunk and
+     * retry each half so that rows rejected by the database (constraint violations,
+     * bad values, ...) are isolated instead of poisoning the whole batch. The
+     * returned {@link InsertResult} reports how many rows were persisted vs. rejected.
+     *
      * @param data       list of actions (rows from Excel)
      * @param mappings   resolved column mappings (from ColumnAutoMapper)
      * @param parameters additional parameters (tableName, schema, etc.)
+     * @return a summary of rows inserted and rows skipped due to errors
      */
-    void insertData(List<Action> data, List<DatabaseMapping> mappings, Map<String, Object> parameters);
+    InsertResult insertData(List<Action> data, List<DatabaseMapping> mappings, Map<String, Object> parameters);
 
     Object check(Object data, Map<String, Object> parameters);
 

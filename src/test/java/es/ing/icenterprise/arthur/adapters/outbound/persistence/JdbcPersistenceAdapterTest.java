@@ -2,12 +2,16 @@ package es.ing.icenterprise.arthur.adapters.outbound.persistence;
 
 import es.ing.icenterprise.arthur.core.domain.model.Action;
 import es.ing.icenterprise.arthur.core.domain.model.DatabaseMapping;
+import es.ing.icenterprise.arthur.core.ports.outbound.InsertResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.JdbcTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -22,17 +26,30 @@ class JdbcPersistenceAdapterTest {
     @Autowired
     JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    PlatformTransactionManager txManager;
+
     private JdbcPersistenceAdapter adapter;
+    private TransactionTemplate committedTx;
 
     @BeforeEach
     void setUp() {
-        adapter = new JdbcPersistenceAdapter(jdbcTemplate);
+        adapter = new JdbcPersistenceAdapter(jdbcTemplate, txManager);
+        committedTx = new TransactionTemplate(txManager);
+        committedTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
         jdbcTemplate.execute(
                 "CREATE TABLE IF NOT EXISTS ITEMS (ID VARCHAR(50), NAME VARCHAR(100), TS TIMESTAMP, SCORE DOUBLE)");
         jdbcTemplate.execute(
                 "CREATE TABLE IF NOT EXISTS LOOKUP_TABLE (KEY_COL VARCHAR(50), VAL_COL VARCHAR(100), TS TIMESTAMP)");
+        jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS BISECT_ITEMS (ID VARCHAR(50) PRIMARY KEY, NAME VARCHAR(100))");
         jdbcTemplate.execute("DELETE FROM ITEMS");
         jdbcTemplate.execute("DELETE FROM LOOKUP_TABLE");
+        // BISECT_ITEMS is written via REQUIRES_NEW (the adapter's bisect),
+        // which commits independently of @JdbcTest's rollback. Clean it with
+        // its own committed transaction so state does not leak across tests.
+        committedTx.executeWithoutResult(s -> jdbcTemplate.execute("DELETE FROM BISECT_ITEMS"));
     }
 
     // ── insertData ────────────────────────────────────────────────────────────
@@ -117,6 +134,89 @@ class JdbcPersistenceAdapterTest {
                 Map.of("tableName", "ITEMS"));
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ITEMS", Integer.class);
         assertThat(count).isZero();
+    }
+
+    @Test
+    @DisplayName("insertData returns inserted count when the whole batch succeeds")
+    void insertDataReturnsInsertedCountOnSuccess() {
+        List<Action> rows = List.of(
+                new Action(Map.of("ID", "a", "Name", "Alice")),
+                new Action(Map.of("ID", "b", "Name", "Bob")),
+                new Action(Map.of("ID", "c", "Name", "Carol")));
+        List<DatabaseMapping> mappings = List.of(
+                new DatabaseMapping("ID", "ID"),
+                new DatabaseMapping("Name", "NAME"));
+
+        InsertResult result = adapter.insertData(rows, mappings,
+                Map.of("tableName", "BISECT_ITEMS", "_ingestDate", LocalDate.of(2026, 1, 1)));
+
+        assertThat(result.inserted()).isEqualTo(3);
+        assertThat(result.failed()).isZero();
+        List<String> ids = jdbcTemplate.queryForList(
+                "SELECT ID FROM BISECT_ITEMS ORDER BY ID", String.class);
+        assertThat(ids).containsExactly("a", "b", "c");
+    }
+
+    @Test
+    @DisplayName("insertData bisects on constraint violation, persisting good rows only")
+    void insertDataBisectsOnConstraintViolation() {
+        // Pre-insert 'dup' in a committed tx so the adapter's REQUIRES_NEW sees it.
+        committedTx.executeWithoutResult(s ->
+                jdbcTemplate.update("INSERT INTO BISECT_ITEMS (ID, NAME) VALUES ('dup', 'pre')"));
+
+        List<Action> rows = List.of(
+                new Action(Map.of("ID", "a", "Name", "Alice")),
+                new Action(Map.of("ID", "dup", "Name", "Duplicate")),
+                new Action(Map.of("ID", "c", "Name", "Carol")),
+                new Action(Map.of("ID", "d", "Name", "Dave")));
+        List<DatabaseMapping> mappings = List.of(
+                new DatabaseMapping("ID", "ID"),
+                new DatabaseMapping("Name", "NAME"));
+
+        InsertResult result = adapter.insertData(rows, mappings,
+                Map.of("tableName", "BISECT_ITEMS", "_ingestDate", LocalDate.of(2026, 1, 1)));
+
+        assertThat(result.inserted()).isEqualTo(3);
+        assertThat(result.failed()).isEqualTo(1);
+        List<String> ids = jdbcTemplate.queryForList(
+                "SELECT ID FROM BISECT_ITEMS ORDER BY ID", String.class);
+        assertThat(ids).containsExactly("a", "c", "d", "dup");
+    }
+
+    @Test
+    @DisplayName("insertData isolates multiple bad rows independently")
+    void insertDataBisectsMultipleBadRows() {
+        committedTx.executeWithoutResult(s -> {
+            jdbcTemplate.update("INSERT INTO BISECT_ITEMS (ID) VALUES ('x1')");
+            jdbcTemplate.update("INSERT INTO BISECT_ITEMS (ID) VALUES ('x2')");
+        });
+
+        List<Action> rows = List.of(
+                new Action(Map.of("ID", "x1", "Name", "bad-1")),
+                new Action(Map.of("ID", "a",  "Name", "good")),
+                new Action(Map.of("ID", "x2", "Name", "bad-2")),
+                new Action(Map.of("ID", "b",  "Name", "good")));
+        List<DatabaseMapping> mappings = List.of(
+                new DatabaseMapping("ID", "ID"),
+                new DatabaseMapping("Name", "NAME"));
+
+        InsertResult result = adapter.insertData(rows, mappings,
+                Map.of("tableName", "BISECT_ITEMS", "_ingestDate", LocalDate.of(2026, 1, 1)));
+
+        assertThat(result.inserted()).isEqualTo(2);
+        assertThat(result.failed()).isEqualTo(2);
+        List<String> ids = jdbcTemplate.queryForList(
+                "SELECT ID FROM BISECT_ITEMS ORDER BY ID", String.class);
+        assertThat(ids).containsExactly("a", "b", "x1", "x2");
+    }
+
+    @Test
+    @DisplayName("insertData returns EMPTY when data list is empty (no bisect attempt)")
+    void insertDataReturnsEmptyForEmptyInput() {
+        InsertResult result = adapter.insertData(List.of(),
+                List.of(new DatabaseMapping("ID", "ID")),
+                Map.of("tableName", "BISECT_ITEMS"));
+        assertThat(result).isEqualTo(InsertResult.EMPTY);
     }
 
     // ── check ─────────────────────────────────────────────────────────────────
