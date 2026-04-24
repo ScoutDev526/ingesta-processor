@@ -48,6 +48,7 @@ public class IngestaService implements ExecuteProcessUseCase {
     private final MetricsCollector metricsCollector;
     private final NotificationPort notificationPort;
     private final CleanupWorkingDirectoryPort cleanupPort;
+    private final ArchiveProcessedFilePort archivePort;
     private final ExecutionLogExporterPort executionLogExporter;
     private final ExcelReportStore excelReportStore;
     private final ExtractDataHrUseCase extractDataHrUseCase;
@@ -60,6 +61,7 @@ public class IngestaService implements ExecuteProcessUseCase {
                           MetricsCollector metricsCollector,
                           NotificationPort notificationPort,
                           CleanupWorkingDirectoryPort cleanupPort,
+                          ArchiveProcessedFilePort archivePort,
                           ExecutionLogExporterPort executionLogExporter,
                           ExcelReportStore excelReportStore,
                           ExtractDataHrUseCase extractDataHrUseCase) {
@@ -71,6 +73,7 @@ public class IngestaService implements ExecuteProcessUseCase {
         this.metricsCollector = metricsCollector;
         this.notificationPort = notificationPort;
         this.cleanupPort = cleanupPort;
+        this.archivePort = archivePort;
         this.executionLogExporter = executionLogExporter;
         this.excelReportStore = excelReportStore;
         this.extractDataHrUseCase = extractDataHrUseCase;
@@ -175,15 +178,23 @@ public class IngestaService implements ExecuteProcessUseCase {
             log.warn("Failed to send notification: {}", e.getMessage());
         }
 
-        // 7. Cleanup working directory
+        // 7. Post-process each data file: XLSX are archived into the cached dir,
+        //    anything else is deleted from the working directory.
         try {
             for (Job job : jobs) {
-                if (job.getFilePath() != null && !"N/A".equals(job.getFilePath())) {
-                    cleanupPort.delete(Path.of(job.getFilePath()));
+                String filePath = job.getFilePath();
+                if (filePath == null || "N/A".equals(filePath)) {
+                    continue;
+                }
+                Path path = Path.of(filePath);
+                if (path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".xlsx")) {
+                    archivePort.archive(path);
+                } else {
+                    cleanupPort.delete(path);
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to cleanup working directory: {}", e.getMessage());
+            log.warn("Failed to post-process working directory: {}", e.getMessage());
         }
 
         log.info("Ingestion process completed. Status: {}, Duration: {}ms",

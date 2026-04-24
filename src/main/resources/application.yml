@@ -28,6 +28,7 @@ ingesta:
     path: classpath:jobs
   data-directory: ""
   working-directory: /tmp/ingesta
+  cached-directory: /tmp/ingesta/cached
   parallel-jobs: 1
   scheduler:
     enabled: false
