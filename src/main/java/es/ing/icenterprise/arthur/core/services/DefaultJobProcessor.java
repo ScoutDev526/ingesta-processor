@@ -3,6 +3,7 @@ package es.ing.icenterprise.arthur.core.services;
 import es.ing.icenterprise.arthur.core.domain.model.*;
 import es.ing.icenterprise.arthur.core.domain.enums.*;
 import es.ing.icenterprise.arthur.core.ports.outbound.FileReaderPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.InsertResult;
 import es.ing.icenterprise.arthur.core.ports.outbound.PersistencePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -379,12 +380,18 @@ public class DefaultJobProcessor implements JobProcessor {
                             + (upsertMode ? " to update" : " skipped")));
                 }
 
-                // INSERT new rows
+                // INSERT new rows. The adapter bisects on batch failure so good
+                // rows survive; the returned InsertResult reports how many rows
+                // were persisted vs. rejected per chunk.
                 int batchSize = ((Number) params.getOrDefault("_batchSize", 500)).intValue();
-                int totalInserted = toInsert.size();
-                for (int i = 0; i < totalInserted; i += batchSize) {
-                    List<Action> chunk = toInsert.subList(i, Math.min(i + batchSize, totalInserted));
-                    persistencePort.insertData(chunk, mappings, params);
+                int totalAttempted = toInsert.size();
+                int insertedOk = 0;
+                int insertedFailed = 0;
+                for (int i = 0; i < totalAttempted; i += batchSize) {
+                    List<Action> chunk = toInsert.subList(i, Math.min(i + batchSize, totalAttempted));
+                    InsertResult result = persistencePort.insertData(chunk, mappings, params);
+                    insertedOk += result.inserted();
+                    insertedFailed += result.failed();
                 }
 
                 // UPDATE existing rows (upsert mode)
@@ -396,9 +403,16 @@ public class DefaultJobProcessor implements JobProcessor {
                     }
                 }
 
-                step.getMetrics().incrementProcessed(totalInserted + totalUpdated);
+                step.getMetrics().incrementProcessed(insertedOk + totalUpdated);
+                if (insertedFailed > 0) {
+                    step.getMetrics().incrementFailed(insertedFailed);
+                    step.addLog(LogEntry.warn(step.getName(),
+                            insertedFailed + " row(s) rejected by the database; see adapter logs"));
+                }
                 step.addLog(LogEntry.summary(step.getName(),
-                        "Inserted " + totalInserted + ", updated " + totalUpdated
+                        "Inserted " + insertedOk
+                        + (insertedFailed > 0 ? " (" + insertedFailed + " failed)" : "")
+                        + ", updated " + totalUpdated
                         + " records (" + mappings.size() + " columns mapped)"));
             }
             case SELECT -> {

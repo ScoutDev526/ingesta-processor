@@ -2,11 +2,16 @@ package es.ing.icenterprise.arthur.adapters.outbound.persistence;
 
 import es.ing.icenterprise.arthur.core.domain.model.Action;
 import es.ing.icenterprise.arthur.core.domain.model.DatabaseMapping;
+import es.ing.icenterprise.arthur.core.ports.outbound.InsertResult;
 import es.ing.icenterprise.arthur.core.ports.outbound.PersistencePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -21,17 +26,22 @@ public class JdbcPersistenceAdapter implements PersistencePort {
     private static final Logger log = LoggerFactory.getLogger(JdbcPersistenceAdapter.class);
 
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
 
-    public JdbcPersistenceAdapter(JdbcTemplate jdbcTemplate) {
+    public JdbcPersistenceAdapter(JdbcTemplate jdbcTemplate, PlatformTransactionManager txManager) {
         this.jdbcTemplate = jdbcTemplate;
+        // REQUIRES_NEW: each batch attempt is its own short-lived transaction so a
+        // failed chunk can be rolled back cleanly before the bisected retries run.
+        this.transactionTemplate = new TransactionTemplate(txManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
-    public void insertData(List<Action> data, List<DatabaseMapping> mappings, Map<String, Object> parameters) {
+    public InsertResult insertData(List<Action> data, List<DatabaseMapping> mappings, Map<String, Object> parameters) {
         String tableName = (String) parameters.getOrDefault("tableName", "ingesta_data");
         log.info("Inserting {} records into table: {} using {} mappings", data.size(), tableName, mappings.size());
 
-        if (data.isEmpty() || mappings.isEmpty()) return;
+        if (data.isEmpty() || mappings.isEmpty()) return InsertResult.EMPTY;
 
         // Build column list from mappings
         List<String> dbColumns = mappings.stream()
@@ -58,8 +68,43 @@ public class JdbcPersistenceAdapter implements PersistencePort {
                 .map(action -> buildRowArgs(action, mappings, ingestTimestamp))
                 .toList();
 
-        jdbcTemplate.batchUpdate(sql, batchArgs);
-        log.info("Successfully inserted {} records into {}", data.size(), tableName);
+        InsertResult result = batchInsertBisect(sql, batchArgs, tableName);
+        log.info("Insert into {} finished: {} inserted, {} failed", tableName, result.inserted(), result.failed());
+        return result;
+    }
+
+    /**
+     * Attempts a batch insert; on failure, splits the chunk in half and retries
+     * each half recursively. When the recursion bottoms out at a single failing
+     * row, that row is logged and counted as failed. This isolates bad rows and
+     * lets the rest of the batch through.
+     */
+    private InsertResult batchInsertBisect(String sql, List<Object[]> batchArgs, String tableName) {
+        if (batchArgs.isEmpty()) return InsertResult.EMPTY;
+        try {
+            return transactionTemplate.execute(status -> {
+                jdbcTemplate.batchUpdate(sql, batchArgs);
+                return new InsertResult(batchArgs.size(), 0);
+            });
+        } catch (DataAccessException e) {
+            if (batchArgs.size() == 1) {
+                log.warn("Skipping bad row for {}: values={} error={}",
+                        tableName, Arrays.toString(batchArgs.get(0)), rootCauseMessage(e));
+                return new InsertResult(0, 1);
+            }
+            int mid = batchArgs.size() / 2;
+            InsertResult left = batchInsertBisect(sql, batchArgs.subList(0, mid), tableName);
+            InsertResult right = batchInsertBisect(sql, batchArgs.subList(mid, batchArgs.size()), tableName);
+            return left.plus(right);
+        }
+    }
+
+    private static String rootCauseMessage(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur.getMessage();
     }
 
     @Override

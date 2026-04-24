@@ -3,6 +3,7 @@ package es.ing.icenterprise.arthur.core.services;
 import es.ing.icenterprise.arthur.core.domain.enums.*;
 import es.ing.icenterprise.arthur.core.domain.model.*;
 import es.ing.icenterprise.arthur.core.ports.outbound.FileReaderPort;
+import es.ing.icenterprise.arthur.core.ports.outbound.InsertResult;
 import es.ing.icenterprise.arthur.core.ports.outbound.PersistencePort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +35,12 @@ class DefaultJobProcessorTest {
     @BeforeEach
     void setUp() {
         lenient().when(fileReader.supports(any())).thenReturn(true);
+        // Default: every chunk inserted successfully (tests can override per-call).
+        lenient().when(persistencePort.insertData(anyList(), anyList(), anyMap()))
+                .thenAnswer(inv -> {
+                    List<?> chunk = inv.getArgument(0);
+                    return new InsertResult(chunk.size(), 0);
+                });
         processor = new DefaultJobProcessor(List.of(fileReader), persistencePort, columnAutoMapper);
     }
 
