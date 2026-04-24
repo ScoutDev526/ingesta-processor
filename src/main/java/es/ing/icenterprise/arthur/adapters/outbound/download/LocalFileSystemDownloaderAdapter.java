@@ -12,6 +12,8 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -66,6 +68,11 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
 
         String suffixLower = suffix.toLowerCase();
 
+        Comparator<Path> byDate = Comparator.comparing(
+                LocalFileSystemDownloaderAdapter::extractPrefixDate,
+                Comparator.nullsFirst(Comparator.naturalOrder()));
+        Comparator<Path> byName = Comparator.comparing(p -> p.getFileName().toString());
+
         try (Stream<Path> files = Files.list(dataDir)) {
             Path match = files
                     .filter(Files::isRegularFile)
@@ -75,7 +82,7 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
                         String nameWithoutExt = dotIndex > 0 ? name.substring(0, dotIndex) : name;
                         return endsWithAtWordBoundary(nameWithoutExt, suffixLower);
                     })
-                    .max(Comparator.comparing(p -> p.getFileName().toString()))
+                    .max(byDate.thenComparing(byName))
                     .orElse(null);
 
             if (match != null) {
@@ -130,7 +137,23 @@ public class LocalFileSystemDownloaderAdapter implements FileDownloaderPort {
     }
 
     private static final int DATE_PREFIX_LENGTH = 11; // "YYYY-MM-DD-"
+    private static final int DATE_LENGTH = 10; // "YYYY-MM-DD"
     private static final Pattern DATE_PREFIX_PATTERN = Pattern.compile("\\d{4}-\\d{2}-\\d{2}-");
+
+    private static LocalDate extractPrefixDate(Path p) {
+        String name = p.getFileName().toString();
+        if (name.length() < DATE_PREFIX_LENGTH) {
+            return null;
+        }
+        if (!DATE_PREFIX_PATTERN.matcher(name.substring(0, DATE_PREFIX_LENGTH)).matches()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(name.substring(0, DATE_LENGTH));
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
 
     private Path resolveSource(String resourcePath) {
         // 1. Try as absolute/relative filesystem path
