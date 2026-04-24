@@ -103,7 +103,7 @@ class LocalFileSystemDownloaderAdapterTest {
     }
 
     @Test
-    @DisplayName("download with dataDirectory picks lexicographically latest when multiple files match")
+    @DisplayName("download with dataDirectory picks the file with the most recent date when multiple match")
     void downloadWithDataDirectoryPicksLatestFile() throws IOException {
         Path older = sourceDir.resolve("2025-01-01-Report-ES.xlsx");
         Path newer = sourceDir.resolve("2026-03-01-Report-ES.xlsx");
@@ -120,6 +120,46 @@ class LocalFileSystemDownloaderAdapterTest {
         Path result = adapter.download(source);
 
         assertThat(result.getFileName().toString()).isEqualTo("2026-03-01-Report-ES.xlsx");
+    }
+
+    @Test
+    @DisplayName("download with dataDirectory prefers dated file over undated one")
+    void downloadWithDataDirectoryPrefersDatedFileWhenMixed() throws IOException {
+        Path undated = sourceDir.resolve("Table_CMDB.xlsx");
+        Path dated = sourceDir.resolve("2026-03-06-Full Dump CMDB.xlsx");
+        Files.writeString(undated, "old");
+        Files.writeString(dated, "new");
+
+        ReflectionTestUtils.setField(adapter, "dataDirectory", sourceDir.toString());
+
+        FileSourceDefinition source = new FileSourceDefinition(
+                FileSourceType.RESOURCES,
+                new FileSourceLocationDefinition("CMDB"),
+                null);
+
+        Path result = adapter.download(source);
+
+        assertThat(result.getFileName().toString()).isEqualTo("2026-03-06-Full Dump CMDB.xlsx");
+    }
+
+    @Test
+    @DisplayName("download with dataDirectory picks newest date even if name sorts lower")
+    void downloadWithDataDirectoryPicksByDateNotName() throws IOException {
+        Path older = sourceDir.resolve("2026-02-15-ZZZ Full Dump Actions-ES.xlsx");
+        Path newer = sourceDir.resolve("2026-03-01-Actions-ES.xlsx");
+        Files.writeString(older, "old");
+        Files.writeString(newer, "new");
+
+        ReflectionTestUtils.setField(adapter, "dataDirectory", sourceDir.toString());
+
+        FileSourceDefinition source = new FileSourceDefinition(
+                FileSourceType.RESOURCES,
+                new FileSourceLocationDefinition("Actions-ES"),
+                null);
+
+        Path result = adapter.download(source);
+
+        assertThat(result.getFileName().toString()).isEqualTo("2026-03-01-Actions-ES.xlsx");
     }
 
     @Test
