@@ -2,6 +2,7 @@ package es.ing.icenterprise.arthur.core.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,7 +41,7 @@ class ImportDataHrServiceTest {
         p.setTitle("title: CFO VIII");
         p.setManager("CN=NT25YI,OU=E3,OU=Production,OU=Users,OU=INGUsers,DC=ad,DC=ing,DC=net");
 
-        when(deleteMapper.deleteByTimestamp(any(LocalDateTime.class))).thenReturn(5);
+        when(deleteMapper.deleteByDayString(anyString())).thenReturn(5);
 
         service.importDataHr(List.of(p));
 
@@ -56,7 +57,7 @@ class ImportDataHrServiceTest {
         assertThat(row.getTitle()).isEqualTo("CFO VIII");
         assertThat(row.getTimestamp()).isNotNull();
 
-        verify(deleteMapper, times(1)).deleteByTimestamp(any(LocalDateTime.class));
+        verify(deleteMapper, times(1)).deleteByDayString(anyString());
     }
 
     @Test
@@ -64,7 +65,15 @@ class ImportDataHrServiceTest {
     void importDataHrEmptyList() {
         service.importDataHr(List.of());
 
-        verify(deleteMapper, times(1)).deleteByTimestamp(any(LocalDateTime.class));
+        verify(deleteMapper, times(1)).deleteByDayString(anyString());
         verify(insertMapper, times(0)).insertOne(any());
+    }
+
+    @Test
+    @DisplayName("toOldDayString formats as dd-MMM-yy in English uppercase")
+    void toOldDayStringFormatsEnglishUppercase() {
+        LocalDateTime ts = LocalDateTime.of(2026, 4, 14, 0, 0);
+        String day = ImportDataHrService.toOldDayString(ts);
+        assertThat(day).isEqualTo("14-APR-26");
     }
 }
